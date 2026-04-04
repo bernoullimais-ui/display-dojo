@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { motion } from 'motion/react';
 import { Tv, Smartphone, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface TVPairingProps {
   onPaired: (teacherId: string, pairingCode: string) => void;
@@ -120,18 +121,32 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           </p>
         </div>
 
-        <div className="relative group">
+        <div className="relative group mx-auto max-w-fit">
           <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
-          <div className="relative bg-zinc-900 border border-zinc-800 px-16 py-10 rounded-2xl shadow-2xl">
+          <div className="relative bg-zinc-900 border border-zinc-800 p-10 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center gap-12">
             {status === 'generating' ? (
-              <div className="flex items-center justify-center gap-3 text-zinc-500">
+              <div className="flex items-center justify-center gap-3 text-zinc-500 p-10">
                 <Loader2 className="animate-spin" />
                 <span className="text-2xl font-mono">GERANDO...</span>
               </div>
             ) : (
-              <span className="text-8xl font-mono font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-400">
-                {pairingCode}
-              </span>
+              <>
+                <div className="flex flex-col items-center gap-4">
+                  <div className="bg-white p-4 rounded-2xl shadow-inner">
+                    <QRCodeSVG value={`${window.location.origin}?code=${pairingCode}`} size={180} level="H" />
+                  </div>
+                  <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Escaneie o QR Code</p>
+                </div>
+                
+                <div className="hidden md:block w-px h-32 bg-zinc-800"></div>
+
+                <div className="flex flex-col items-center gap-4">
+                  <span className="text-7xl font-mono font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-400">
+                    {pairingCode}
+                  </span>
+                  <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Ou digite o código</p>
+                </div>
+              </>
             )}
           </div>
         </div>
