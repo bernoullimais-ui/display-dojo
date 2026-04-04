@@ -5,6 +5,18 @@ interface ScoreboardProps {
   externalCommand: { type: string; payload?: any } | null;
 }
 
+const ScoreNumber = ({ value }: { value: number }) => (
+  <motion.span
+    key={value}
+    initial={{ scale: 1.5, filter: 'brightness(2)' }}
+    animate={{ scale: 1, filter: 'brightness(1)' }}
+    transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+    className="text-[9rem] font-black leading-none inline-block"
+  >
+    {value}
+  </motion.span>
+);
+
 export default function Scoreboard({ externalCommand }: ScoreboardProps) {
   const [matchTime, setMatchTime] = useState(240); // 4 minutes default
   const [osaekomiTime, setOsaekomiTime] = useState(0);
@@ -13,6 +25,10 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
   
   const [blueScore, setBlueScore] = useState({ wazaari: 0, ippon: 0, yuko: 0, shido: 0 });
   const [whiteScore, setWhiteScore] = useState({ wazaari: 0, ippon: 0, yuko: 0, shido: 0 });
+
+  const [winner, setWinner] = useState<'blue' | 'white' | null>(null);
+  const [isGoldenScore, setIsGoldenScore] = useState(false);
+  const [goldenScoreTime, setGoldenScoreTime] = useState(0);
 
   const matchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const osaekomiTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -39,6 +55,9 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
         setOsaekomiActive(null);
         setBlueScore({ wazaari: 0, ippon: 0, yuko: 0, shido: 0 });
         setWhiteScore({ wazaari: 0, ippon: 0, yuko: 0, shido: 0 });
+        setWinner(null);
+        setIsGoldenScore(false);
+        setGoldenScoreTime(0);
         break;
       case 'SCOREBOARD_SET_MATCH_TIME':
         setMatchTime(payload);
@@ -66,19 +85,74 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
 
   // Match Timer
   useEffect(() => {
-    if (isMatchRunning && matchTime > 0) {
-      matchTimerRef.current = setInterval(() => {
-        setMatchTime(prev => prev - 1);
-      }, 1000);
-    } else if (matchTime === 0) {
-      setIsMatchRunning(false);
-      if (osaekomiActive) setOsaekomiActive(null);
+    if (isMatchRunning) {
+      if (!isGoldenScore && matchTime > 0) {
+        matchTimerRef.current = setInterval(() => {
+          setMatchTime(prev => {
+            if (prev <= 1) return 0;
+            return prev - 1;
+          });
+        }, 1000);
+      } else if (isGoldenScore) {
+        matchTimerRef.current = setInterval(() => {
+          setGoldenScoreTime(prev => prev + 1);
+        }, 1000);
+      }
     }
 
     return () => {
       if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     };
-  }, [isMatchRunning, matchTime, osaekomiActive]);
+  }, [isMatchRunning, matchTime, isGoldenScore]);
+
+  // Re-evaluate winner on score change or time end
+  useEffect(() => {
+    let newWinner: 'blue' | 'white' | null = null;
+
+    // 1. Immediate win conditions (Ippon, 2 Waza-ari, 3 Shidos)
+    if (blueScore.ippon >= 1 || blueScore.wazaari >= 2 || whiteScore.shido >= 3) {
+      newWinner = 'blue';
+    } else if (whiteScore.ippon >= 1 || whiteScore.wazaari >= 2 || blueScore.shido >= 3) {
+      newWinner = 'white';
+    } 
+    // 2. Golden Score sudden death
+    else if (isGoldenScore) {
+      if (blueScore.wazaari > whiteScore.wazaari || blueScore.yuko > whiteScore.yuko) {
+        newWinner = 'blue';
+      } else if (whiteScore.wazaari > blueScore.wazaari || whiteScore.yuko > blueScore.yuko) {
+        newWinner = 'white';
+      }
+    } 
+    // 3. Time ended in regular time
+    else if (matchTime === 0) {
+      if (blueScore.wazaari > whiteScore.wazaari) {
+        newWinner = 'blue';
+      } else if (whiteScore.wazaari > blueScore.wazaari) {
+        newWinner = 'white';
+      } else if (blueScore.yuko > whiteScore.yuko) {
+        newWinner = 'blue';
+      } else if (whiteScore.yuko > blueScore.yuko) {
+        newWinner = 'white';
+      }
+    }
+
+    if (newWinner !== winner) {
+      setWinner(newWinner);
+      if (newWinner) {
+        setIsMatchRunning(false);
+        setOsaekomiActive(null);
+      }
+    } else if (!newWinner && winner) {
+      setWinner(null);
+    }
+
+    // Handle entering Golden Score
+    if (matchTime === 0 && !isGoldenScore && !newWinner) {
+      setIsGoldenScore(true);
+      setIsMatchRunning(false);
+      setOsaekomiActive(null);
+    }
+  }, [blueScore, whiteScore, matchTime, isGoldenScore, winner]);
 
   // Osaekomi Timer
   useEffect(() => {
@@ -102,18 +176,6 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
-
-  const ScoreNumber = ({ value }: { value: number }) => (
-    <motion.span
-      key={value}
-      initial={{ scale: 1.5, filter: 'brightness(2)' }}
-      animate={{ scale: 1, filter: 'brightness(1)' }}
-      transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-      className="text-[9rem] font-black leading-none inline-block"
-    >
-      {value}
-    </motion.span>
-  );
 
   const renderScore = (score: { wazaari: number, ippon: number, yuko: number, shido: number }, isBlue: boolean) => (
     <div className={`flex-1 flex flex-col items-center justify-center p-8 ${isBlue ? 'bg-blue-600 text-white' : 'bg-white text-black'}`}>
@@ -154,9 +216,14 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
     <div className="w-full h-full flex flex-col bg-zinc-900 rounded-[3rem] overflow-hidden border border-zinc-800 shadow-2xl relative">
       {/* Top Bar: Match Timer */}
       <div className="absolute top-0 left-0 right-0 h-40 bg-black/80 backdrop-blur-md z-10 flex items-center justify-center border-b border-white/10">
-        <div className={`text-[8rem] font-black font-mono tracking-tight ${matchTime === 0 ? 'text-red-500' : 'text-white'}`}>
-          {formatTime(matchTime)}
+        <div className={`text-[8rem] font-black font-mono tracking-tight ${matchTime === 0 && !isGoldenScore ? 'text-red-500' : isGoldenScore ? 'text-amber-400' : 'text-white'}`}>
+          {isGoldenScore ? formatTime(goldenScoreTime) : formatTime(matchTime)}
         </div>
+        {isGoldenScore && (
+          <div className="absolute bottom-4 text-amber-400 font-bold tracking-widest uppercase text-sm">
+            Golden Score
+          </div>
+        )}
       </div>
 
       {/* Main Score Area */}
@@ -166,15 +233,42 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
       </div>
 
       {/* Osaekomi Overlay */}
-      {osaekomiActive && (
+      {osaekomiActive && !winner && (
         <motion.div 
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className={`absolute bottom-12 left-1/2 -translate-x-1/2 px-16 py-8 rounded-full shadow-2xl flex items-center gap-8 border-4
+          className={`absolute bottom-12 left-1/2 -translate-x-1/2 px-16 py-8 rounded-full shadow-2xl flex items-center gap-8 border-4 z-20
             ${osaekomiActive === 'blue' ? 'bg-blue-600 border-white text-white' : 'bg-white border-black text-black'}`}
         >
           <span className="text-4xl font-black uppercase tracking-widest">Osaekomi</span>
           <span className="text-7xl font-mono font-black">{osaekomiTime}</span>
+        </motion.div>
+      )}
+
+      {/* Winner Overlay */}
+      {winner && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 z-40 pointer-events-none flex"
+        >
+          <div className={`flex-1 transition-colors duration-1000 ${winner === 'blue' ? 'bg-blue-500/30' : 'bg-black/50'}`} />
+          <div className={`flex-1 transition-colors duration-1000 ${winner === 'white' ? 'bg-white/30' : 'bg-black/50'}`} />
+          
+          <motion.div 
+            initial={{ scale: 0, rotate: -10 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring', bounce: 0.5 }}
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-16 py-8 rounded-3xl shadow-2xl border-4 backdrop-blur-md
+              ${winner === 'blue' ? 'bg-blue-600/90 border-white text-white' : 'bg-white/90 border-black text-black'}`}
+          >
+            <div className="text-6xl font-black uppercase tracking-widest text-center">
+              Vencedor
+            </div>
+            <div className="text-2xl font-bold uppercase tracking-widest text-center mt-2 opacity-80">
+              {winner === 'blue' ? 'Atleta Azul' : 'Atleta Branco'}
+            </div>
+          </motion.div>
         </motion.div>
       )}
     </div>

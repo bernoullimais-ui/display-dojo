@@ -44,7 +44,8 @@ const getYouTubeEmbedUrl = (url: string) => {
 };
 
 function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: RemoteControlProps) {
-  const [activeTab, setActiveTab] = useState<'TIMER' | 'MEDIA' | 'SCHEDULE' | 'SETTINGS' | 'SCOREBOARD'>('TIMER');
+  const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB'>('TIMER');
+  const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO'>('LIBRARY');
   const [localConfig, setLocalConfig] = useState({
     prepTime: 10,
     workTime: 20,
@@ -60,7 +61,8 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
     prepAudioUrl: '',
     workAudioUrl: '',
     restAudioUrl: '',
-    imageDuration: 15
+    imageDuration: 15,
+    splashDuration: 4
   });
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
@@ -427,12 +429,10 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
         </div>
       </div>
 
-      <div className="w-full grid grid-cols-5 bg-zinc-900/50 p-1">
+      <div className="w-full grid grid-cols-3 bg-zinc-900/50 p-1">
         <button onClick={() => setActiveTab('TIMER')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'TIMER' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Treino</button>
         <button onClick={() => setActiveTab('SCOREBOARD')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'SCOREBOARD' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Placar</button>
-        <button onClick={() => setActiveTab('MEDIA')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'MEDIA' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Mídias</button>
-        <button onClick={() => setActiveTab('SCHEDULE')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'SCHEDULE' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Agenda</button>
-        <button onClick={() => setActiveTab('SETTINGS')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'SETTINGS' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Dojo</button>
+        <button onClick={() => setActiveTab('MEDIA_HUB')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'MEDIA_HUB' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Mídias</button>
       </div>
 
       <div className="flex-1 w-full max-w-md p-6 overflow-y-auto space-y-8">
@@ -649,10 +649,18 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
           </div>
         )}
 
-        {activeTab === 'MEDIA' && (
+        {activeTab === 'MEDIA_HUB' && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Biblioteca</h3>
+            <div className="w-full grid grid-cols-3 bg-zinc-900/50 p-1 rounded-xl mb-4">
+              <button onClick={() => setActiveSubTab('LIBRARY')} className={`py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'LIBRARY' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Biblioteca</button>
+              <button onClick={() => setActiveSubTab('SCHEDULE')} className={`py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'SCHEDULE' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Agenda</button>
+              <button onClick={() => setActiveSubTab('DOJO')} className={`py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'DOJO' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Dojo</button>
+            </div>
+
+            {activeSubTab === 'LIBRARY' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Biblioteca</h3>
               <div className="flex gap-2">
                 <button 
                   onClick={() => handleCommand('STOP_MEDIA')} 
@@ -719,7 +727,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
           </div>
         )}
 
-        {activeTab === 'SCHEDULE' && (
+            {activeSubTab === 'SCHEDULE' && (
           <div className="space-y-6">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
               <div className="space-y-2">
@@ -854,7 +862,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
           </div>
         )}
 
-        {activeTab === 'SETTINGS' && (
+            {activeSubTab === 'DOJO' && (
           <div className="space-y-8">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
               <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Configuração do Dojo</h3>
@@ -867,6 +875,19 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                   onBlur={(e) => saveDojoName(e.target.value)}
                   className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
                   placeholder="Ex: Dojo Central"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase">Tempo da Logo Inicial (segundos)</label>
+                <p className="text-xs text-zinc-600">Tempo que a logo do Dojo aparece ao abrir a TV.</p>
+                <input 
+                  type="number" 
+                  min="1"
+                  max="60"
+                  defaultValue={localConfig.splashDuration || 4}
+                  onBlur={(e) => updateConfig('splashDuration', parseInt(e.target.value))}
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -936,6 +957,8 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </div>
             </div>
           </div>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -997,12 +1020,13 @@ export default function App() {
 
   useEffect(() => {
     if (viewMode === 'TV' && teacherId && !isLoadingSettings) {
-      const timer = setTimeout(() => setShowSplash(false), 4000);
+      const duration = (dojoSettings.timer_config?.splashDuration || 4) * 1000;
+      const timer = setTimeout(() => setShowSplash(false), duration);
       return () => clearTimeout(timer);
     } else if (viewMode === 'REMOTE') {
       setShowSplash(true);
     }
-  }, [viewMode, teacherId, isLoadingSettings]);
+  }, [viewMode, teacherId, isLoadingSettings, dojoSettings.timer_config?.splashDuration]);
 
   // Listen for remote commands
   useEffect(() => {
