@@ -5,7 +5,7 @@ import RemotePairing from './components/RemotePairing';
 import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
-import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check } from 'lucide-react';
+import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 interface MediaItem {
@@ -416,8 +416,11 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
           <div className="flex items-center gap-2">
             <button onClick={async () => {
               if (supabase) {
+                if (pairingCode) {
+                  await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', pairingCode);
+                }
                 await supabase.auth.signOut();
-                onClose(); // This will reset viewMode to TV, but since teacherId is null, it will go back to pairing/login
+                window.location.href = '/';
               }
             }} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-red-500">
               <LogOut size={16} /> Sair
@@ -446,6 +449,13 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </div>
               <motion.button 
                 whileTap={{ scale: 0.95, filter: 'brightness(1.2)' }}
+                onClick={() => handleCommand('HIDE_TIMER')} 
+                className="w-full bg-zinc-800 py-4 rounded-2xl font-bold text-zinc-300 flex items-center justify-center gap-2"
+              >
+                OMITIR TREINO
+              </motion.button>
+              <motion.button 
+                whileTap={{ scale: 0.95, filter: 'brightness(1.2)' }}
                 onClick={() => handleCommand('STOP_MEDIA')} 
                 className="w-full bg-red-500/10 border border-red-500/20 py-4 rounded-2xl font-bold text-red-500 flex items-center justify-center gap-2"
               >
@@ -460,19 +470,35 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                   { label: 'Trabalho', field: 'workTime', icon: <Zap size={16} className="text-red-500" /> },
                   { label: 'Descanso', field: 'restTime', icon: <Coffee size={16} className="text-green-500" /> },
                   { label: 'Ciclos', field: 'cycles', icon: <RotateCcw size={16} /> },
-                ].map((item) => (
-                  <div key={item.field} className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-zinc-800/50">
-                    <div className="flex items-center gap-3">
-                      <span className="text-zinc-500">{item.icon}</span>
-                      <span className="font-medium text-sm">{item.label}</span>
+                ].map((item) => {
+                  const getStep = (field: string) => {
+                    if (field === 'prepTime' || field === 'cycles') return 1;
+                    if (field === 'workTime' || field === 'restTime') return 5;
+                    return 1;
+                  };
+                  const getMin = (field: string) => {
+                    if (field === 'workTime' || field === 'restTime') return 5;
+                    if (field === 'prepTime') return 0;
+                    return 1;
+                  };
+                  const step = getStep(item.field);
+                  const min = getMin(item.field);
+                  const currentValue = (localConfig as any)[item.field];
+
+                  return (
+                    <div key={item.field} className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-zinc-800/50">
+                      <div className="flex items-center gap-3">
+                        <span className="text-zinc-500">{item.icon}</span>
+                        <span className="font-medium text-sm">{item.label}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <button onClick={() => updateConfig(item.field, Math.max(min, currentValue - step))} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold">-</button>
+                        <span className="w-8 text-center font-mono font-bold">{currentValue}</span>
+                        <button onClick={() => updateConfig(item.field, currentValue + step)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold">+</button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => updateConfig(item.field, Math.max(1, (localConfig as any)[item.field] - (item.field === 'cycles' ? 1 : 5)))} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold">-</button>
-                      <span className="w-8 text-center font-mono font-bold">{(localConfig as any)[item.field]}</span>
-                      <button onClick={() => updateConfig(item.field, (localConfig as any)[item.field] + (item.field === 'cycles' ? 1 : 5))} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold">+</button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -663,6 +689,13 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                   <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Biblioteca</h3>
               <div className="flex gap-2">
                 <button 
+                  onClick={() => handleCommand('TOGGLE_FULLSCREEN')} 
+                  className="p-2 rounded-full bg-blue-500/20 text-blue-500 hover:bg-blue-500/30 transition-colors"
+                  title="Tela Cheia"
+                >
+                  <Maximize size={20} />
+                </button>
+                <button 
                   onClick={() => handleCommand('STOP_MEDIA')} 
                   className="p-2 rounded-full bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors"
                   title="Interromper Mídia"
@@ -843,7 +876,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                         <span className="text-blue-400 truncate max-w-[80px]">{s.media?.name}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-zinc-500">
-                        <Clock size={12} /> {s.start_time} - {s.end_time}
+                        <Clock size={12} /> {s.start_time.substring(0, 5)} - {s.end_time.substring(0, 5)}
                       </div>
                     </div>
                   </div>
@@ -982,6 +1015,7 @@ export default function App() {
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isScoreboardActive, setIsScoreboardActive] = useState(false);
+  const [isFullscreenMedia, setIsFullscreenMedia] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
 
@@ -1035,6 +1069,16 @@ export default function App() {
     const channel = supabase
       .channel(`remote-control-${pairingCode}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${pairingCode}` }, (payload) => {
+        if (payload.new.status === 'pending' || !payload.new.teacher_id) {
+          setTeacherId(null);
+          setPairingCode(null);
+          return;
+        }
+        
+        if (payload.new.teacher_id && payload.new.teacher_id !== teacherId) {
+          setTeacherId(payload.new.teacher_id);
+        }
+        
         if (payload.new.last_command) {
           const cmd = payload.new.last_command;
           setRemoteCommand(cmd);
@@ -1042,14 +1086,18 @@ export default function App() {
             setIsTimerActive(true);
             setIsScoreboardActive(false);
           }
-          if (cmd.type === 'PAUSE') setIsTimerActive(false);
-          if (cmd.type === 'RESET') {
+          if (cmd.type === 'HIDE_TIMER') {
             setIsTimerActive(false);
+          }
+          if (cmd.type === 'RESET') {
             setActiveMedia(null);
           }
           if (cmd.type === 'SHOW_MEDIA') {
             setActiveMedia(cmd.payload);
             setIsScoreboardActive(false);
+          }
+          if (cmd.type === 'TOGGLE_FULLSCREEN') {
+            setIsFullscreenMedia(prev => !prev);
           }
           if (cmd.type === 'STOP_MEDIA') setActiveMedia(null);
           if (cmd.type === 'SHOW_SCOREBOARD') {
@@ -1100,11 +1148,13 @@ export default function App() {
     const currentDay = currentClock.getDay();
     const currentTimeStr = `${currentClock.getHours().toString().padStart(2, '0')}:${currentClock.getMinutes().toString().padStart(2, '0')}`;
 
-    return schedules.filter(s => 
-      s.day_of_week === currentDay && 
-      currentTimeStr >= s.start_time && 
-      currentTimeStr <= s.end_time
-    );
+    return schedules.filter(s => {
+      const start = s.start_time.substring(0, 5);
+      const end = s.end_time.substring(0, 5);
+      return s.day_of_week === currentDay && 
+             currentTimeStr >= start && 
+             currentTimeStr <= end;
+    });
   }, [schedules, isTimerActive, activeMedia, currentClock]);
 
   const currentScheduledMedia = useMemo(() => {
@@ -1288,14 +1338,16 @@ export default function App() {
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {activeMedia || currentScheduledMedia ? (
-                        <div className="relative w-full max-w-5xl aspect-video bg-zinc-900 rounded-[3rem] overflow-hidden border border-zinc-800 shadow-2xl">
+                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full absolute inset-0 z-50 rounded-none border-0' : 'w-full max-w-5xl aspect-video rounded-[3rem] border border-zinc-800'}`}>
                           {renderMedia((activeMedia || currentScheduledMedia)!, !activeMedia)}
-                          <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
-                            <p className="text-lg font-black uppercase tracking-widest flex items-center gap-3">
-                              {activeMedia ? <PlayCircle className="text-blue-500" /> : <Calendar className="text-amber-500" />}
-                              {activeMedia ? 'AO VIVO' : 'PROGRAMADO'}
-                            </p>
-                          </div>
+                          {!isFullscreenMedia && (
+                            <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
+                              <p className="text-lg font-black uppercase tracking-widest flex items-center gap-3">
+                                {activeMedia ? <PlayCircle className="text-blue-500" /> : <Calendar className="text-amber-500" />}
+                                {activeMedia ? 'AO VIVO' : 'PROGRAMADO'}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-center space-y-12">

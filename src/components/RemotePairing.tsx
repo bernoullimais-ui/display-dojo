@@ -43,11 +43,18 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
            return;
         }
 
+        // Unpair any existing sessions for this teacher to ensure they are only connected to one TV
+        // We do this before any pairing logic to enforce the 1-TV-per-user rule
+        await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('teacher_id', teacherId);
+
         if (session.status === 'paired') {
-          // Already paired, maybe we are reconnecting?
+          // Already paired, maybe we are reconnecting or taking over?
           if (session.teacher_id !== teacherId) {
-             // Overwrite if it's a different user claiming it, or just update it
+             // Overwrite if it's a different user claiming it
              await supabase.from('sessions').update({ teacher_id: teacherId }).eq('id', pairingCode);
+          } else {
+             // If it was the same user, we just unpaired them above, so we need to re-pair them
+             await supabase.from('sessions').update({ status: 'paired', teacher_id: teacherId }).eq('id', pairingCode);
           }
           setStatus('success');
           setTimeout(() => onPaired(teacherId), 1000);
