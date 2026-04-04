@@ -1299,21 +1299,23 @@ export default function App() {
             {!isLoadingSettings && (
               <>
                 {/* Status Bar */}
-                <div className="fixed top-0 left-0 w-full p-8 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-10">
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-zinc-500 font-mono text-sm tracking-widest">CONECTADO</span>
+                {!isFullscreenMedia && (
+                  <div className="fixed top-0 left-0 w-full p-8 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-10">
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-zinc-500 font-mono text-sm tracking-widest">CONECTADO</span>
+                      </div>
+                      <button onClick={() => setViewMode('REMOTE')} className="text-zinc-500 hover:text-blue-400 flex items-center gap-2 text-xs font-bold uppercase border border-zinc-800 px-3 py-1 rounded-full">
+                        <SmartphoneIcon size={14} /> Modo Controle
+                      </button>
                     </div>
-                    <button onClick={() => setViewMode('REMOTE')} className="text-zinc-500 hover:text-blue-400 flex items-center gap-2 text-xs font-bold uppercase border border-zinc-800 px-3 py-1 rounded-full">
-                      <SmartphoneIcon size={14} /> Modo Controle
+                    <button onClick={() => { setTeacherId(null); setPairingCode(null); }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
+                      <LogOut size={16} />
+                      <span className="text-xs font-bold uppercase tracking-tighter">Desconectar</span>
                     </button>
                   </div>
-                  <button onClick={() => { setTeacherId(null); setPairingCode(null); }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
-                    <LogOut size={16} />
-                    <span className="text-xs font-bold uppercase tracking-tighter">Desconectar</span>
-                  </button>
-                </div>
+                )}
 
                 <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center h-full relative">
                   {/* Display Logic */}
@@ -1330,7 +1332,7 @@ export default function App() {
                         initialConfig={dojoSettings.timer_config}
                       />
                       {activeMedia && (
-                        <div className="relative aspect-video bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl">
+                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'aspect-video rounded-3xl border border-zinc-800'}`}>
                           {renderMedia(activeMedia, false)}
                         </div>
                       )}
@@ -1338,7 +1340,7 @@ export default function App() {
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {activeMedia || currentScheduledMedia ? (
-                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full absolute inset-0 z-50 rounded-none border-0' : 'w-full max-w-5xl aspect-video rounded-[3rem] border border-zinc-800'}`}>
+                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full max-w-5xl aspect-video rounded-[3rem] border border-zinc-800'}`}>
                           {renderMedia((activeMedia || currentScheduledMedia)!, !activeMedia)}
                           {!isFullscreenMedia && (
                             <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
