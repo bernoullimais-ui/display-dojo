@@ -936,7 +936,7 @@ export default function App() {
   const codeFromUrl = urlParams.get('code');
 
   const [teacherId, setTeacherId] = useState<string | null>(null);
-  const [pairingCode, setPairingCode] = useState<string | null>(codeFromUrl);
+  const [pairingCode, setPairingCode] = useState<string | null>(codeFromUrl ? codeFromUrl.toUpperCase() : null);
   const [remoteCommand, setRemoteCommand] = useState<{ type: string; payload?: any } | null>(null);
   const [viewMode, setViewMode] = useState<'TV' | 'REMOTE'>(codeFromUrl ? 'REMOTE' : 'TV');
   const [showSplash, setShowSplash] = useState(true);

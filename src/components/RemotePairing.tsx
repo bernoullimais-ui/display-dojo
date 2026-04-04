@@ -54,8 +54,9 @@ export default function RemotePairing({ pairingCode, onPaired }: RemotePairingPr
           .eq('id', pairingCode);
 
         if (updateError) {
+          console.error('Update error:', updateError);
           setStatus('error');
-          setErrorMsg('Erro ao conectar com a TV.');
+          setErrorMsg(`Erro ao conectar com a TV: ${updateError.message}`);
           return;
         }
 
