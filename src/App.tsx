@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import TVPairing from './components/TVPairing';
+import RemotePairing from './components/RemotePairing';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check } from 'lucide-react';
@@ -931,10 +932,13 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 }
 
 export default function App() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const codeFromUrl = urlParams.get('code');
+
   const [teacherId, setTeacherId] = useState<string | null>(null);
-  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(codeFromUrl);
   const [remoteCommand, setRemoteCommand] = useState<{ type: string; payload?: any } | null>(null);
-  const [viewMode, setViewMode] = useState<'TV' | 'REMOTE'>('TV');
+  const [viewMode, setViewMode] = useState<'TV' | 'REMOTE'>(codeFromUrl ? 'REMOTE' : 'TV');
   const [showSplash, setShowSplash] = useState(true);
   const [activeMedia, setActiveMedia] = useState<MediaItem | null>(null);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
@@ -1116,11 +1120,18 @@ export default function App() {
   };
 
   if (!teacherId) {
+    if (viewMode === 'REMOTE' && pairingCode) {
+      return <RemotePairing pairingCode={pairingCode} onPaired={(id) => setTeacherId(id)} />;
+    }
     return <TVPairing onPaired={(id, code) => { setTeacherId(id); setPairingCode(code); }} />;
   }
 
   if (viewMode === 'REMOTE' && pairingCode) {
-    return <RemoteControl pairingCode={pairingCode} teacherId={teacherId} onSendCommand={sendRemoteCommand} onClose={() => setViewMode('TV')} />;
+    return <RemoteControl pairingCode={pairingCode} teacherId={teacherId} onSendCommand={sendRemoteCommand} onClose={() => {
+      // Clear URL parameter when closing remote
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setViewMode('TV');
+    }} />;
   }
 
   return (
