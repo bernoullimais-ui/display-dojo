@@ -70,11 +70,13 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
         }
         break;
       case 'SCOREBOARD_START_OSAEKOMI':
+        setOsaekomiTime(0);
         setOsaekomiActive(payload);
         setIsMatchRunning(true); // Osaekomi implies match is running
         break;
       case 'SCOREBOARD_STOP_OSAEKOMI':
         setOsaekomiActive(null);
+        setOsaekomiTime(0);
         break;
       case 'SCOREBOARD_RESET_OSAEKOMI':
         setOsaekomiTime(0);
@@ -124,7 +126,7 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
       }
     } 
     // 3. Time ended in regular time
-    else if (matchTime === 0) {
+    else if (matchTime === 0 && !osaekomiActive) {
       if (blueScore.wazaari > whiteScore.wazaari) {
         newWinner = 'blue';
       } else if (whiteScore.wazaari > blueScore.wazaari) {
@@ -147,29 +149,49 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
     }
 
     // Handle entering Golden Score
-    if (matchTime === 0 && !isGoldenScore && !newWinner) {
+    if (matchTime === 0 && !isGoldenScore && !newWinner && !osaekomiActive) {
       setIsGoldenScore(true);
       setIsMatchRunning(false);
       setOsaekomiActive(null);
     }
-  }, [blueScore, whiteScore, matchTime, isGoldenScore, winner]);
+  }, [blueScore, whiteScore, matchTime, isGoldenScore, winner, osaekomiActive]);
 
   // Osaekomi Timer
   useEffect(() => {
-    if (osaekomiActive) {
+    if (osaekomiActive && !winner) {
       osaekomiTimerRef.current = setInterval(() => {
-        setOsaekomiTime(prev => {
-          const newTime = prev + 1;
-          // Auto-score logic could go here, but better handled by referee/remote
-          return newTime;
-        });
+        setOsaekomiTime(prev => prev + 1);
       }, 1000);
     }
 
     return () => {
       if (osaekomiTimerRef.current) clearInterval(osaekomiTimerRef.current);
     };
-  }, [osaekomiActive]);
+  }, [osaekomiActive, winner]);
+
+  // Osaekomi Auto-Scoring
+  useEffect(() => {
+    if (!osaekomiActive) return;
+
+    const activePlayer = osaekomiActive;
+    const updateScore = (player: 'blue' | 'white', updates: (s: any) => any) => {
+      if (player === 'blue') {
+        setBlueScore(s => ({ ...s, ...updates(s) }));
+      } else {
+        setWhiteScore(s => ({ ...s, ...updates(s) }));
+      }
+    };
+
+    if (osaekomiTime === 5) {
+      updateScore(activePlayer, s => ({ yuko: s.yuko + 1 }));
+    } else if (osaekomiTime === 10) {
+      updateScore(activePlayer, s => ({ wazaari: s.wazaari + 1, yuko: Math.max(0, s.yuko - 1) }));
+    } else if (osaekomiTime === 20) {
+      updateScore(activePlayer, s => ({ ippon: s.ippon + 1, wazaari: Math.max(0, s.wazaari - 1) }));
+      setOsaekomiActive(null);
+      setOsaekomiTime(0);
+    }
+  }, [osaekomiTime, osaekomiActive]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
