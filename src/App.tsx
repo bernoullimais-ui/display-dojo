@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import TVPairing from './components/TVPairing';
 import RemotePairing from './components/RemotePairing';
+import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check } from 'lucide-react';
@@ -410,9 +411,19 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </>
             )}
           </div>
-          <button onClick={onClose} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
-            <Monitor size={16} /> TV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={async () => {
+              if (supabase) {
+                await supabase.auth.signOut();
+                onClose(); // This will reset viewMode to TV, but since teacherId is null, it will go back to pairing/login
+              }
+            }} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-red-500">
+              <LogOut size={16} /> Sair
+            </button>
+            <button onClick={onClose} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
+              <Monitor size={16} /> TV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -935,6 +946,8 @@ export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const codeFromUrl = urlParams.get('code');
 
+  const [session, setSession] = useState<any>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [teacherId, setTeacherId] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(codeFromUrl ? codeFromUrl.toUpperCase() : null);
   const [remoteCommand, setRemoteCommand] = useState<{ type: string; payload?: any } | null>(null);
@@ -948,6 +961,25 @@ export default function App() {
   const [isScoreboardActive, setIsScoreboardActive] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
+
+  useEffect(() => {
+    if (!supabase) {
+      setIsAuthLoading(false);
+      return;
+    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Fetch schedules and settings for TV
   useEffect(() => {
@@ -1119,9 +1151,21 @@ export default function App() {
     );
   };
 
+  if (isAuthLoading && viewMode === 'REMOTE') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-red-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (viewMode === 'REMOTE' && !session) {
+    return <Auth onAuthSuccess={() => {}} />;
+  }
+
   if (!teacherId) {
     if (viewMode === 'REMOTE' && pairingCode) {
-      return <RemotePairing pairingCode={pairingCode} onPaired={(id) => setTeacherId(id)} />;
+      return <RemotePairing pairingCode={pairingCode} onPaired={(id) => setTeacherId(id)} session={session} />;
     }
     return <TVPairing onPaired={(id, code) => { setTeacherId(id); setPairingCode(code); }} />;
   }

@@ -6,9 +6,10 @@ import { motion } from 'motion/react';
 interface RemotePairingProps {
   pairingCode: string;
   onPaired: (teacherId: string) => void;
+  session?: any;
 }
 
-export default function RemotePairing({ pairingCode, onPaired }: RemotePairingProps) {
+export default function RemotePairing({ pairingCode, onPaired, session: authSession }: RemotePairingProps) {
   const [status, setStatus] = useState<'connecting' | 'success' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -34,25 +35,26 @@ export default function RemotePairing({ pairingCode, onPaired }: RemotePairingPr
           return;
         }
 
+        const teacherId = authSession?.user?.id;
+
+        if (!teacherId) {
+           setStatus('error');
+           setErrorMsg('Usuário não autenticado.');
+           return;
+        }
+
         if (session.status === 'paired') {
           // Already paired, maybe we are reconnecting?
-          // Let's just use the existing teacher_id if it exists, or generate a new one
-          const teacherId = session.teacher_id || crypto.randomUUID();
-          if (!session.teacher_id) {
-            await supabase.from('sessions').update({ teacher_id: teacherId }).eq('id', pairingCode);
+          if (session.teacher_id !== teacherId) {
+             // Overwrite if it's a different user claiming it, or just update it
+             await supabase.from('sessions').update({ teacher_id: teacherId }).eq('id', pairingCode);
           }
           setStatus('success');
           setTimeout(() => onPaired(teacherId), 1000);
           return;
         }
 
-        // 2. Pair! Generate a teacher ID and update the session
-        let teacherId = localStorage.getItem('dojo_teacher_id');
-        if (!teacherId) {
-          teacherId = crypto.randomUUID();
-          localStorage.setItem('dojo_teacher_id', teacherId);
-        }
-        
+        // 2. Pair! Use the authenticated user's ID
         // Try to insert into dojo_settings table first, in case there is a foreign key constraint
         const { error: settingsError } = await supabase.from('dojo_settings').insert([{ teacher_id: teacherId, name: 'JUDO DOJO' }]);
         if (settingsError) {
