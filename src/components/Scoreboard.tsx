@@ -3,6 +3,9 @@ import { motion } from 'motion/react';
 
 interface ScoreboardProps {
   externalCommand: { type: string; payload?: any } | null;
+  blueName?: string;
+  whiteName?: string;
+  category?: string;
 }
 
 const ScoreNumber = ({ value }: { value: number }) => (
@@ -17,7 +20,14 @@ const ScoreNumber = ({ value }: { value: number }) => (
   </motion.span>
 );
 
-export default function Scoreboard({ externalCommand }: ScoreboardProps) {
+export default function Scoreboard({ 
+  externalCommand,
+  blueName,
+  whiteName,
+  category = ''
+}: ScoreboardProps) {
+  const displayBlueName = blueName || 'AZUL';
+  const displayWhiteName = whiteName || 'BRANCO';
   const [matchTime, setMatchTime] = useState(240); // 4 minutes default
   const [osaekomiTime, setOsaekomiTime] = useState(0);
   const [osaekomiActive, setOsaekomiActive] = useState<'blue' | 'white' | null>(null);
@@ -201,8 +211,8 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
 
   const renderScore = (score: { wazaari: number, ippon: number, yuko: number, shido: number }, isBlue: boolean) => (
     <div className={`flex-1 flex flex-col items-center justify-center p-8 ${isBlue ? 'bg-blue-600 text-white' : 'bg-white text-black'}`}>
-      <div className="text-6xl font-black uppercase tracking-widest mb-12 opacity-80">
-        {isBlue ? 'AZUL' : 'BRANCO'}
+      <div className="text-6xl font-black uppercase tracking-widest mb-12 opacity-80 text-center">
+        {isBlue ? displayBlueName : displayWhiteName}
       </div>
       
       <div className="flex gap-12 mb-16">
@@ -237,8 +247,13 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
   return (
     <div className="w-full h-full flex flex-col bg-zinc-900 rounded-[3rem] overflow-hidden border border-zinc-800 shadow-2xl relative">
       {/* Top Bar: Match Timer */}
-      <div className="absolute top-0 left-0 right-0 h-40 bg-black/80 backdrop-blur-md z-10 flex items-center justify-center border-b border-white/10">
-        <div className={`text-[8rem] font-black font-mono tracking-tight ${matchTime === 0 && !isGoldenScore ? 'text-red-500' : isGoldenScore ? 'text-amber-400' : 'text-white'}`}>
+      <div className="absolute top-0 left-0 right-0 h-40 bg-black/80 backdrop-blur-md z-10 flex flex-col items-center justify-center border-b border-white/10">
+        {category && (
+          <div className="absolute top-4 text-zinc-400 font-bold tracking-widest uppercase text-sm">
+            {category}
+          </div>
+        )}
+        <div className={`text-[8rem] font-black font-mono tracking-tight leading-none mt-4 ${matchTime === 0 && !isGoldenScore ? 'text-red-500' : isGoldenScore ? 'text-amber-400' : 'text-white'}`}>
           {isGoldenScore ? formatTime(goldenScoreTime) : formatTime(matchTime)}
         </div>
         {isGoldenScore && (
@@ -288,7 +303,7 @@ export default function Scoreboard({ externalCommand }: ScoreboardProps) {
               Vencedor
             </div>
             <div className="text-2xl font-bold uppercase tracking-widest text-center mt-2 opacity-80">
-              {winner === 'blue' ? 'Atleta Azul' : 'Atleta Branco'}
+              {winner === 'blue' ? displayBlueName : displayWhiteName}
             </div>
           </motion.div>
         </motion.div>

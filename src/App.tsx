@@ -5,7 +5,7 @@ import RemotePairing from './components/RemotePairing';
 import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
-import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize } from 'lucide-react';
+import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 interface MediaItem {
@@ -15,15 +15,47 @@ interface MediaItem {
   type: 'image' | 'video';
 }
 
+interface TimerPreset {
+  id: string;
+  name: string;
+  config: {
+    prepTime: number;
+    workTime: number;
+    restTime: number;
+    cycles: number;
+    prepLabel: string;
+    workLabel: string;
+    restLabel: string;
+  };
+}
+
+interface Playlist {
+  id: string;
+  name: string;
+  media_ids: string[];
+}
+
 interface DojoSettings {
   name: string;
   logo_url: string | null;
   timer_config?: any;
+  presets?: TimerPreset[];
+  scoreboard_config?: {
+    blueName: string;
+    whiteName: string;
+    category: string;
+  };
+  ticker_config?: {
+    text: string;
+    active: boolean;
+  };
+  playlists?: Playlist[];
 }
 
 interface ScheduleItem {
   id: string;
-  media_id: string;
+  media_id?: string;
+  playlist_id?: string;
   day_of_week: number;
   start_time: string;
   end_time: string;
@@ -45,7 +77,16 @@ const getYouTubeEmbedUrl = (url: string) => {
 
 function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: RemoteControlProps) {
   const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB'>('TIMER');
-  const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO'>('LIBRARY');
+  const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
+  const [scoreboardConfig, setScoreboardConfig] = useState({
+    blueName: 'AZUL',
+    whiteName: 'BRANCO',
+    category: ''
+  });
+  const [tickerConfig, setTickerConfig] = useState({
+    text: '',
+    active: false
+  });
   const [localConfig, setLocalConfig] = useState({
     prepTime: 10,
     workTime: 20,
@@ -69,13 +110,16 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
   const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
   const [isUploading, setIsUploading] = useState(false);
   const [showAddSchedule, setShowAddSchedule] = useState(false);
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  const [editingPreset, setEditingPreset] = useState<TimerPreset | null>(null);
+  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [mediaUrlInput, setMediaUrlInput] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [showVolumePopup, setShowVolumePopup] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
   const [newSchedule, setNewSchedule] = useState({
-    media_ids: [] as string[],
+    playlist_id: '',
     day_of_week: new Date().getDay(),
     start_time: '08:00',
     end_time: '10:00'
@@ -110,15 +154,18 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
       if (mediaData) {
         setMediaList(mediaData);
-        if (mediaData.length > 0) {
-          setNewSchedule(prev => ({ ...prev, media_id: mediaData[0].id }));
-        }
       }
       if (scheduleData) setSchedules(scheduleData);
       if (settingsData) {
         setDojoSettings(settingsData);
         if (settingsData.timer_config) {
           setLocalConfig(prev => ({ ...prev, ...settingsData.timer_config }));
+        }
+        if (settingsData.scoreboard_config) {
+          setScoreboardConfig(prev => ({ ...prev, ...settingsData.scoreboard_config }));
+        }
+        if (settingsData.ticker_config) {
+          setTickerConfig(prev => ({ ...prev, ...settingsData.ticker_config }));
         }
       }
     };
@@ -143,6 +190,52 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
     }
   };
 
+  const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category', value: string) => {
+    const newConfig = { ...scoreboardConfig, [field]: value };
+    setScoreboardConfig(newConfig);
+    
+    if (field === 'category') {
+      handleCommand('SCOREBOARD_SET_CATEGORY', value);
+    } else {
+      handleCommand('SCOREBOARD_SET_NAMES', { 
+        blue: field === 'blueName' ? value : scoreboardConfig.blueName,
+        white: field === 'whiteName' ? value : scoreboardConfig.whiteName
+      });
+    }
+    
+    if (supabase && teacherId) {
+      await supabase.from('dojo_settings').update({ scoreboard_config: newConfig }).eq('teacher_id', teacherId);
+    }
+  };
+
+  const updateTickerConfig = async (field: 'text' | 'active', value: string | boolean) => {
+    const newConfig = { ...tickerConfig, [field]: value };
+    setTickerConfig(newConfig);
+    handleCommand('TICKER_UPDATE', newConfig);
+    
+    if (supabase && teacherId) {
+      await supabase.from('dojo_settings').update({ ticker_config: newConfig }).eq('teacher_id', teacherId);
+    }
+  };
+
+  const updatePlaylists = async (newPlaylists: Playlist[]) => {
+    const newSettings = { ...dojoSettings, playlists: newPlaylists };
+    setDojoSettings(newSettings);
+    if (supabase && teacherId) {
+      await supabase.from('dojo_settings').update({ playlists: newPlaylists }).eq('teacher_id', teacherId);
+    }
+  };
+
+  const handleConfigChange = async (newSettings: Partial<typeof localConfig>) => {
+    const newConfig = { ...localConfig, ...newSettings };
+    setLocalConfig(newConfig);
+    handleCommand('CONFIG_UPDATE', newConfig);
+    
+    if (supabase && teacherId) {
+      await supabase.from('dojo_settings').update({ timer_config: newConfig }).eq('teacher_id', teacherId);
+    }
+  };
+
   const updateLabel = async (field: string, value: string) => {
     const newConfig = { ...localConfig, [field]: value };
     setLocalConfig(newConfig);
@@ -151,6 +244,45 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
     if (supabase && teacherId) {
       await supabase.from('dojo_settings').update({ timer_config: newConfig }).eq('teacher_id', teacherId);
     }
+  };
+
+  const defaultPresets: TimerPreset[] = [
+    { id: '1', name: 'Randori', config: { prepTime: 10, workTime: 300, restTime: 60, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'RANDORI', restLabel: 'DESCANSO' } },
+    { id: '2', name: 'Uchikomi', config: { prepTime: 10, workTime: 60, restTime: 10, cycles: 10, prepLabel: 'PREPARAÇÃO', workLabel: 'UCHIKOMI', restLabel: 'TROCA' } },
+    { id: '3', name: 'Tabata', config: { prepTime: 10, workTime: 20, restTime: 10, cycles: 8, prepLabel: 'PREPARAÇÃO', workLabel: 'TRABALHO', restLabel: 'DESCANSO' } },
+    { id: '4', name: 'Newaza', config: { prepTime: 10, workTime: 120, restTime: 30, cycles: 6, prepLabel: 'PREPARAÇÃO', workLabel: 'NEWAZA', restLabel: 'DESCANSO' } }
+  ];
+
+  const activePresets = dojoSettings.presets || defaultPresets;
+
+  const savePreset = async (preset: TimerPreset) => {
+    if (!supabase || !teacherId) return;
+    
+    let newPresets = [...activePresets];
+    const existingIndex = newPresets.findIndex(p => p.id === preset.id);
+    
+    if (existingIndex >= 0) {
+      newPresets[existingIndex] = preset;
+    } else {
+      newPresets.push(preset);
+    }
+
+    const newSettings = { ...dojoSettings, presets: newPresets };
+    setDojoSettings(newSettings);
+    
+    await supabase.from('dojo_settings').update({ presets: newPresets }).eq('teacher_id', teacherId);
+    setEditingPreset(null);
+    setShowPresetManager(false);
+  };
+
+  const deletePreset = async (id: string) => {
+    if (!supabase || !teacherId) return;
+    
+    const newPresets = activePresets.filter(p => p.id !== id);
+    const newSettings = { ...dojoSettings, presets: newPresets };
+    setDojoSettings(newSettings);
+    
+    await supabase.from('dojo_settings').update({ presets: newPresets }).eq('teacher_id', teacherId);
   };
 
   const updateColor = async (field: string, value: string) => {
@@ -192,9 +324,6 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
       setMediaList([mediaData, ...mediaList]);
       setMediaUrlInput('');
       setShowUrlInput(false);
-      if (newSchedule.media_ids.length === 0) {
-        setNewSchedule(prev => ({ ...prev, media_ids: [mediaData.id] }));
-      }
     } catch (error: any) {
       console.error('URL add failed:', error);
       alert('Falha ao adicionar URL: ' + (error.message || 'Erro desconhecido'));
@@ -270,9 +399,6 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
         if (dbError) throw dbError;
         setMediaList([mediaData, ...mediaList]);
-        if (newSchedule.media_ids.length === 0) {
-          setNewSchedule(prev => ({ ...prev, media_ids: [mediaData.id] }));
-        }
       }
     } catch (error: any) {
       console.error('Upload failed:', error);
@@ -311,25 +437,25 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
   const addSchedule = async () => {
     if (!supabase) return;
-    if (newSchedule.media_ids.length === 0) return alert('Selecione ao menos uma mídia!');
+    if (!newSchedule.playlist_id) return alert('Selecione uma playlist!');
     
-    const payloads = newSchedule.media_ids.map(id => ({
+    const payload = {
       teacher_id: teacherId,
-      media_id: id,
+      playlist_id: newSchedule.playlist_id,
       day_of_week: newSchedule.day_of_week,
       start_time: newSchedule.start_time,
       end_time: newSchedule.end_time
-    }));
+    };
 
     const { data, error } = await supabase
       .from('schedules')
-      .insert(payloads)
-      .select('*, media:media_id(*)');
+      .insert([payload])
+      .select('*');
 
     if (data) {
       setSchedules([...schedules, ...data]);
       setShowAddSchedule(false);
-      setNewSchedule(prev => ({ ...prev, media_ids: [] }));
+      setNewSchedule(prev => ({ ...prev, playlist_id: '' }));
     }
     if (error) console.error(error);
   };
@@ -367,6 +493,96 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
     await supabase.from('dojo_settings').upsert({ teacher_id: teacherId, timer_config: newConfig, updated_at: new Date().toISOString() });
     handleCommand('SETTINGS_UPDATE', { ...dojoSettings, timer_config: newConfig });
   };
+
+  if (showPresetManager) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center">
+        <div className="w-full p-6 flex justify-between items-center border-b border-zinc-900">
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setShowPresetManager(false); setEditingPreset(null); }} className="text-zinc-400 hover:text-white">
+              <XCircle size={24} />
+            </button>
+            <span className="font-bold tracking-tighter">GERENCIAR PRESETS</span>
+          </div>
+          <button 
+            onClick={() => setEditingPreset({ id: Math.random().toString(), name: 'Novo Preset', config: { prepTime: 10, workTime: 60, restTime: 10, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'TRABALHO', restLabel: 'DESCANSO' } })}
+            className="text-xs bg-blue-600 px-4 py-2 rounded-full font-bold uppercase tracking-wider"
+          >
+            + Novo
+          </button>
+        </div>
+
+        <div className="flex-1 w-full max-w-md p-6 overflow-y-auto space-y-6">
+          {editingPreset ? (
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
+              <div>
+                <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Nome do Preset</label>
+                <input 
+                  type="text" 
+                  value={editingPreset.name}
+                  onChange={(e) => setEditingPreset({ ...editingPreset, name: e.target.value })}
+                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Prep (s)</label>
+                  <input type="number" value={editingPreset.config.prepTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, prepTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Rótulo Prep</label>
+                  <input type="text" value={editingPreset.config.prepLabel} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, prepLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Trab (s)</label>
+                  <input type="number" value={editingPreset.config.workTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Rótulo Trab</label>
+                  <input type="text" value={editingPreset.config.workLabel} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Desc (s)</label>
+                  <input type="number" value={editingPreset.config.restTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Rótulo Desc</label>
+                  <input type="text" value={editingPreset.config.restLabel} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs text-blue-400 font-bold uppercase mb-1 block">Ciclos</label>
+                  <input type="number" value={editingPreset.config.cycles} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, cycles: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button onClick={() => setEditingPreset(null)} className="flex-1 bg-zinc-800 py-3 rounded-xl font-bold text-sm">Cancelar</button>
+                <button onClick={() => savePreset(editingPreset)} className="flex-1 bg-blue-600 py-3 rounded-xl font-bold text-sm">Salvar</button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {activePresets.map(preset => (
+                <div key={preset.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-lg">{preset.name}</h4>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {preset.config.workTime}s / {preset.config.restTime}s • {preset.config.cycles} ciclos
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingPreset(preset)} className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 text-blue-400"><Edit size={16} /></button>
+                    <button onClick={() => deletePreset(preset.id)} className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 text-red-500"><Trash2 size={16} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center">
@@ -462,6 +678,29 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                 <XCircle size={18} /> PARAR MÍDIA
               </motion.button>
             </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Presets Rápidos</h3>
+                <button onClick={() => setShowPresetManager(true)} className="text-[10px] bg-zinc-800 text-zinc-300 px-3 py-1 rounded-full font-bold uppercase tracking-wider hover:bg-zinc-700 transition-colors">Gerenciar</button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {activePresets.map(preset => (
+                  <motion.button 
+                    key={preset.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleConfigChange(preset.config)}
+                    className="bg-zinc-800 hover:bg-zinc-700 py-3 px-2 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-colors"
+                  >
+                    <span>{preset.name}</span>
+                    <span className="text-[10px] text-zinc-400 font-normal">
+                      {preset.config.workTime >= 60 ? `${Math.floor(preset.config.workTime / 60)}m` : `${preset.config.workTime}s`} / {preset.config.restTime >= 60 ? `${Math.floor(preset.config.restTime / 60)}m` : `${preset.config.restTime}s`}
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 space-y-6">
               <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Configurações</h3>
               <div className="space-y-4">
@@ -594,6 +833,45 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
             </div>
 
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
+              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Configuração da Luta</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Categoria / Peso</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: -73kg Sênior" 
+                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
+                    value={scoreboardConfig.category}
+                    onChange={(e) => updateScoreboardConfig('category', e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-blue-400 font-bold uppercase mb-1 block">Atleta Azul</label>
+                    <input 
+                      type="text" 
+                      placeholder="Nome (Equipe)" 
+                      className="w-full bg-blue-950/30 border border-blue-900/50 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
+                      value={scoreboardConfig.blueName}
+                      onChange={(e) => updateScoreboardConfig('blueName', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-300 font-bold uppercase mb-1 block">Atleta Branco</label>
+                    <input 
+                      type="text" 
+                      placeholder="Nome (Equipe)" 
+                      className="w-full bg-zinc-800/30 border border-zinc-700/50 rounded-xl p-3 text-sm focus:border-zinc-400 outline-none transition-colors"
+                      value={scoreboardConfig.whiteName}
+                      onChange={(e) => updateScoreboardConfig('whiteName', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
               <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Controle de Luta</h3>
               
               <div className="flex items-center gap-4 bg-black/40 p-4 rounded-2xl border border-zinc-800/50">
@@ -677,10 +955,12 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
         {activeTab === 'MEDIA_HUB' && (
           <div className="space-y-6">
-            <div className="w-full grid grid-cols-3 bg-zinc-900/50 p-1 rounded-xl mb-4">
-              <button onClick={() => setActiveSubTab('LIBRARY')} className={`py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'LIBRARY' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Biblioteca</button>
-              <button onClick={() => setActiveSubTab('SCHEDULE')} className={`py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'SCHEDULE' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Agenda</button>
-              <button onClick={() => setActiveSubTab('DOJO')} className={`py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'DOJO' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Dojo</button>
+            <div className="w-full flex overflow-x-auto bg-zinc-900/50 p-1 rounded-xl mb-4 hide-scrollbar">
+              <button onClick={() => setActiveSubTab('LIBRARY')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'LIBRARY' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Biblioteca</button>
+              <button onClick={() => setActiveSubTab('PLAYLISTS')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'PLAYLISTS' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Playlists</button>
+              <button onClick={() => setActiveSubTab('SCHEDULE')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'SCHEDULE' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Agenda</button>
+              <button onClick={() => setActiveSubTab('TICKER')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'TICKER' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Letreiro</button>
+              <button onClick={() => setActiveSubTab('DOJO')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'DOJO' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Dojo</button>
             </div>
 
             {activeSubTab === 'LIBRARY' && (
@@ -790,31 +1070,17 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
             {showAddSchedule && (
               <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Mídias (Selecione uma ou mais)</label>
-                  <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-black rounded-xl border border-zinc-800">
-                    {mediaList.map(m => (
-                      <div 
-                        key={m.id}
-                        onClick={() => {
-                          setNewSchedule(prev => ({
-                            ...prev,
-                            media_ids: prev.media_ids.includes(m.id) 
-                              ? prev.media_ids.filter(id => id !== m.id)
-                              : [...prev.media_ids, m.id]
-                          }))
-                        }}
-                        className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${newSchedule.media_ids.includes(m.id) ? 'border-blue-500 scale-95' : 'border-transparent hover:border-zinc-700'}`}
-                      >
-                        {m.type === 'image' ? <img src={m.url} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><Video size={20} className="text-zinc-500" /></div>}
-                        {newSchedule.media_ids.includes(m.id) && (
-                          <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                            <div className="bg-blue-500 text-white rounded-full p-1"><Check size={16} /></div>
-                          </div>
-                        )}
-                      </div>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Playlist</label>
+                  <select 
+                    value={newSchedule.playlist_id}
+                    onChange={(e) => setNewSchedule(prev => ({ ...prev, playlist_id: e.target.value }))}
+                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Selecione uma playlist...</option>
+                    {(dojoSettings.playlists || []).map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.media_ids.length} mídias)</option>
                     ))}
-                    {mediaList.length === 0 && <div className="col-span-3 text-center text-xs text-zinc-500 py-4">Nenhuma mídia disponível</div>}
-                  </div>
+                  </select>
                 </div>
 
                 <div className="space-y-2">
@@ -863,17 +1129,19 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
             )}
 
             <div className="space-y-4">
-              {schedules.map((s) => (
+              {schedules.map((s) => {
+                const playlist = dojoSettings.playlists?.find(p => p.id === s.playlist_id);
+                return (
                 <div key={s.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden">
-                      {s.media?.type === 'image' ? <img src={s.media.url} className="w-full h-full object-cover" /> : <Video className="m-auto text-zinc-600 mt-3" size={20} />}
+                    <div className="w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden flex items-center justify-center">
+                      <PlayCircle className="text-zinc-600" size={20} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
                         <Calendar size={12} /> {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][s.day_of_week]}
                         <span className="text-zinc-600 ml-1">•</span>
-                        <span className="text-blue-400 truncate max-w-[80px]">{s.media?.name}</span>
+                        <span className="text-blue-400 truncate max-w-[120px]">{playlist?.name || 'Playlist Removida'}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-zinc-500">
                         <Clock size={12} /> {s.start_time.substring(0, 5)} - {s.end_time.substring(0, 5)}
@@ -884,7 +1152,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     <Trash2 size={18} />
                   </button>
                 </div>
-              ))}
+              )})}
               {schedules.length === 0 && (
                 <div className="py-12 text-center border-2 border-dashed border-zinc-900 rounded-3xl">
                   <Calendar className="mx-auto text-zinc-800 mb-4" size={40} />
@@ -894,6 +1162,147 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
             </div>
           </div>
         )}
+
+            {activeSubTab === 'PLAYLISTS' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Playlists</h3>
+                  <button 
+                    onClick={() => setEditingPlaylist({ id: Math.random().toString(), name: 'Nova Playlist', media_ids: [] })}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
+                  >
+                    <Plus size={16} /> CRIAR
+                  </button>
+                </div>
+
+                {editingPlaylist ? (
+                  <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold">Editar Playlist</h3>
+                      <button onClick={() => setEditingPlaylist(null)} className="text-zinc-500 hover:text-white"><XCircle size={20} /></button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Nome da Playlist</label>
+                      <input 
+                        type="text" 
+                        value={editingPlaylist.name}
+                        onChange={(e) => setEditingPlaylist({ ...editingPlaylist, name: e.target.value })}
+                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Mídias ({editingPlaylist.media_ids.length})</label>
+                      <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
+                        {mediaList.map(m => (
+                          <div 
+                            key={m.id}
+                            onClick={() => {
+                              setEditingPlaylist(prev => {
+                                if (!prev) return prev;
+                                const newIds = prev.media_ids.includes(m.id) 
+                                  ? prev.media_ids.filter(id => id !== m.id)
+                                  : [...prev.media_ids, m.id];
+                                return { ...prev, media_ids: newIds };
+                              });
+                            }}
+                            className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${editingPlaylist.media_ids.includes(m.id) ? 'border-blue-500 scale-95' : 'border-transparent hover:border-zinc-700'}`}
+                          >
+                            {m.type === 'image' ? <img src={m.url} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><Video size={20} className="text-zinc-500" /></div>}
+                            {editingPlaylist.media_ids.includes(m.id) && (
+                              <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                                <div className="bg-blue-500 text-white rounded-full p-1"><Check size={16} /></div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          const newPlaylists = (dojoSettings.playlists || []).filter(p => p.id !== editingPlaylist.id);
+                          updatePlaylists(newPlaylists);
+                          setEditingPlaylist(null);
+                        }}
+                        className="flex-1 bg-red-500/20 text-red-500 py-3 rounded-xl font-bold text-sm"
+                      >
+                        EXCLUIR
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const exists = (dojoSettings.playlists || []).find(p => p.id === editingPlaylist.id);
+                          const newPlaylists = exists 
+                            ? (dojoSettings.playlists || []).map(p => p.id === editingPlaylist.id ? editingPlaylist : p)
+                            : [...(dojoSettings.playlists || []), editingPlaylist];
+                          updatePlaylists(newPlaylists);
+                          setEditingPlaylist(null);
+                        }}
+                        className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm"
+                      >
+                        SALVAR
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {(!dojoSettings.playlists || dojoSettings.playlists.length === 0) ? (
+                      <div className="text-center py-12 bg-zinc-900/50 rounded-3xl border border-zinc-800 border-dashed">
+                        <p className="text-zinc-500 text-sm">Nenhuma playlist criada.</p>
+                      </div>
+                    ) : (
+                      dojoSettings.playlists.map(playlist => (
+                        <div key={playlist.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
+                          <div>
+                            <h4 className="font-bold">{playlist.name}</h4>
+                            <p className="text-xs text-zinc-500">{playlist.media_ids.length} mídias</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleCommand('SHOW_PLAYLIST', playlist)}
+                              className="p-2 bg-white text-black rounded-full hover:bg-zinc-200"
+                            >
+                              <PlayCircle size={20} />
+                            </button>
+                            <button 
+                              onClick={() => setEditingPlaylist(playlist)}
+                              className="p-2 bg-zinc-800 text-zinc-400 rounded-full hover:text-white"
+                            >
+                              <Settings size={20} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeSubTab === 'TICKER' && (
+              <div className="space-y-6">
+                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Letreiro Digital (Avisos)</h3>
+                    <button 
+                      onClick={() => updateTickerConfig('active', !tickerConfig.active)}
+                      className={`w-12 h-6 rounded-full transition-colors relative ${tickerConfig.active ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                    >
+                      <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${tickerConfig.active ? 'left-7' : 'left-1'}`} />
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Digite o aviso que ficará passando no rodapé da TV..." 
+                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
+                    value={tickerConfig.text}
+                    onChange={(e) => updateTickerConfig('text', e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
 
             {activeSubTab === 'DOJO' && (
           <div className="space-y-8">
@@ -1010,11 +1419,22 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'TV' | 'REMOTE'>(codeFromUrl ? 'REMOTE' : 'TV');
   const [showSplash, setShowSplash] = useState(true);
   const [activeMedia, setActiveMedia] = useState<MediaItem | null>(null);
+  const [activeManualPlaylist, setActiveManualPlaylist] = useState<Playlist | null>(null);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isScoreboardActive, setIsScoreboardActive] = useState(false);
+  const [scoreboardConfig, setScoreboardConfig] = useState({
+    blueName: 'AZUL',
+    whiteName: 'BRANCO',
+    category: ''
+  });
+  const [tickerConfig, setTickerConfig] = useState({
+    text: '',
+    active: false
+  });
   const [isFullscreenMedia, setIsFullscreenMedia] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
@@ -1038,15 +1458,19 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch schedules and settings for TV
+  // Fetch schedules, settings, and media for TV
   useEffect(() => {
     if (!teacherId || viewMode !== 'TV' || !supabase) return;
     const fetchData = async () => {
-      const { data: scheduleData } = await supabase.from('schedules').select('*, media:media_id(*)').eq('teacher_id', teacherId);
+      const { data: scheduleData } = await supabase.from('schedules').select('*').eq('teacher_id', teacherId);
       if (scheduleData) setSchedules(scheduleData);
 
       const { data: settingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', teacherId).single();
       if (settingsData) setDojoSettings(settingsData);
+
+      const { data: mediaData } = await supabase.from('media').select('*').eq('teacher_id', teacherId);
+      if (mediaData) setMediaList(mediaData);
+
       setIsLoadingSettings(false);
     };
     fetchData();
@@ -1094,12 +1518,21 @@ export default function App() {
           }
           if (cmd.type === 'SHOW_MEDIA') {
             setActiveMedia(cmd.payload);
+            setActiveManualPlaylist(null);
+            setIsScoreboardActive(false);
+          }
+          if (cmd.type === 'SHOW_PLAYLIST') {
+            setActiveManualPlaylist(cmd.payload);
+            setActiveMedia(null);
             setIsScoreboardActive(false);
           }
           if (cmd.type === 'TOGGLE_FULLSCREEN') {
             setIsFullscreenMedia(prev => !prev);
           }
-          if (cmd.type === 'STOP_MEDIA') setActiveMedia(null);
+          if (cmd.type === 'STOP_MEDIA') {
+            setActiveMedia(null);
+            setActiveManualPlaylist(null);
+          }
           if (cmd.type === 'SHOW_SCOREBOARD') {
             setIsScoreboardActive(true);
             setIsTimerActive(false);
@@ -1109,6 +1542,20 @@ export default function App() {
           if (cmd.type === 'SETTINGS_UPDATE') setDojoSettings(cmd.payload);
           if (cmd.type === 'TOGGLE_MUTE') setIsMuted(cmd.payload);
           if (cmd.type === 'SET_VOLUME') setVolume(cmd.payload);
+          
+          if (cmd.type === 'SCOREBOARD_SET_NAMES') {
+            setScoreboardConfig(prev => ({
+              ...prev,
+              blueName: cmd.payload.blue !== undefined ? cmd.payload.blue : prev.blueName,
+              whiteName: cmd.payload.white !== undefined ? cmd.payload.white : prev.whiteName
+            }));
+          }
+          if (cmd.type === 'SCOREBOARD_SET_CATEGORY') {
+            setScoreboardConfig(prev => ({ ...prev, category: cmd.payload }));
+          }
+          if (cmd.type === 'TICKER_UPDATE') {
+            setTickerConfig(cmd.payload);
+          }
         }
       })
       .subscribe();
@@ -1143,7 +1590,7 @@ export default function App() {
 
   // Logic to find current scheduled media
   const activeSchedules = useMemo(() => {
-    if (isTimerActive || activeMedia) return []; // Priority: Timer > Manual Media > Schedule
+    if (isTimerActive || activeMedia || activeManualPlaylist) return []; // Priority: Timer > Manual Media/Playlist > Schedule
 
     const currentDay = currentClock.getDay();
     const currentTimeStr = `${currentClock.getHours().toString().padStart(2, '0')}:${currentClock.getMinutes().toString().padStart(2, '0')}`;
@@ -1155,15 +1602,34 @@ export default function App() {
              currentTimeStr >= start && 
              currentTimeStr <= end;
     });
-  }, [schedules, isTimerActive, activeMedia, currentClock]);
+  }, [schedules, isTimerActive, activeMedia, activeManualPlaylist, currentClock]);
+
+  const activePlaylistMedia = useMemo(() => {
+    if (activeManualPlaylist) {
+      return activeManualPlaylist.media_ids
+        .map(id => mediaList.find(m => m.id === id))
+        .filter((m): m is MediaItem => m !== undefined);
+    }
+    
+    if (activeSchedules.length === 0) return [];
+    // Get the first active schedule
+    const activeSchedule = activeSchedules[0];
+    const playlist = dojoSettings.playlists?.find(p => p.id === activeSchedule.playlist_id);
+    if (!playlist) return [];
+    
+    // Map media_ids to actual MediaItems
+    return playlist.media_ids
+      .map(id => mediaList.find(m => m.id === id))
+      .filter((m): m is MediaItem => m !== undefined);
+  }, [activeSchedules, dojoSettings.playlists, mediaList, activeManualPlaylist]);
 
   const currentScheduledMedia = useMemo(() => {
-    if (activeSchedules.length === 0) return null;
-    return activeSchedules[scheduleIndex % activeSchedules.length]?.media || null;
-  }, [activeSchedules, scheduleIndex]);
+    if (activePlaylistMedia.length === 0) return null;
+    return activePlaylistMedia[scheduleIndex % activePlaylistMedia.length] || null;
+  }, [activePlaylistMedia, scheduleIndex]);
 
   useEffect(() => {
-    if (!currentScheduledMedia || activeSchedules.length <= 1) return;
+    if (!currentScheduledMedia || activePlaylistMedia.length <= 1) return;
 
     let timeout: NodeJS.Timeout;
     const isYouTube = currentScheduledMedia.url.includes('youtube.com') || currentScheduledMedia.url.includes('youtu.be');
@@ -1179,7 +1645,7 @@ export default function App() {
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [currentScheduledMedia, activeSchedules.length, dojoSettings.timer_config?.imageDuration]);
+  }, [currentScheduledMedia, activePlaylistMedia.length, dojoSettings.timer_config?.imageDuration]);
 
   const getYouTubeEmbedUrl = (url: string, muted: boolean, loop: boolean) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -1190,7 +1656,7 @@ export default function App() {
   };
 
   const renderMedia = (media: MediaItem, isScheduled: boolean) => {
-    const shouldLoop = !isScheduled || activeSchedules.length <= 1;
+    const shouldLoop = !isScheduled || activePlaylistMedia.length <= 1;
     const youtubeUrl = getYouTubeEmbedUrl(media.url, isMuted, shouldLoop);
     
     if (youtubeUrl) {
@@ -1321,7 +1787,12 @@ export default function App() {
                   {/* Display Logic */}
                   {isScoreboardActive ? (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Scoreboard externalCommand={remoteCommand} />
+                      <Scoreboard 
+                        externalCommand={remoteCommand} 
+                        blueName={scoreboardConfig.blueName}
+                        whiteName={scoreboardConfig.whiteName}
+                        category={scoreboardConfig.category}
+                      />
                     </div>
                   ) : isTimerActive ? (
                     <div className={`w-full h-full flex items-center justify-center ${activeMedia ? 'grid grid-cols-2 gap-12' : ''}`}>
@@ -1345,8 +1816,8 @@ export default function App() {
                           {!isFullscreenMedia && (
                             <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
                               <p className="text-lg font-black uppercase tracking-widest flex items-center gap-3">
-                                {activeMedia ? <PlayCircle className="text-blue-500" /> : <Calendar className="text-amber-500" />}
-                                {activeMedia ? 'AO VIVO' : 'PROGRAMADO'}
+                                {activeMedia || activeManualPlaylist ? <PlayCircle className="text-blue-500" /> : <Calendar className="text-amber-500" />}
+                                {activeMedia ? 'AO VIVO' : activeManualPlaylist ? 'PLAYLIST' : 'PROGRAMADO'}
                               </p>
                             </div>
                           )}
@@ -1379,6 +1850,26 @@ export default function App() {
                 </div>
               </>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Ticker */}
+      <AnimatePresence>
+        {tickerConfig.active && tickerConfig.text && (
+          <motion.div
+            initial={{ y: 100 }}
+            animate={{ y: 0 }}
+            exit={{ y: 100 }}
+            className="fixed bottom-0 left-0 right-0 bg-red-600 text-white font-bold text-3xl py-4 z-[150] overflow-hidden whitespace-nowrap"
+          >
+            <div className="inline-block animate-[ticker_20s_linear_infinite]">
+              {tickerConfig.text}
+              <span className="mx-24">•</span>
+              {tickerConfig.text}
+              <span className="mx-24">•</span>
+              {tickerConfig.text}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
