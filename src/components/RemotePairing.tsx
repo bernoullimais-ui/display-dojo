@@ -47,7 +47,18 @@ export default function RemotePairing({ pairingCode, onPaired }: RemotePairingPr
         }
 
         // 2. Pair! Generate a teacher ID and update the session
-        const teacherId = crypto.randomUUID();
+        let teacherId = localStorage.getItem('dojo_teacher_id');
+        if (!teacherId) {
+          teacherId = crypto.randomUUID();
+          localStorage.setItem('dojo_teacher_id', teacherId);
+        }
+        
+        // Try to insert into dojo_settings table first, in case there is a foreign key constraint
+        const { error: settingsError } = await supabase.from('dojo_settings').insert([{ teacher_id: teacherId, name: 'JUDO DOJO' }]);
+        if (settingsError) {
+          console.warn('Could not insert dojo_settings (might not exist or not needed):', settingsError);
+        }
+        
         const { error: updateError } = await supabase
           .from('sessions')
           .update({ status: 'paired', teacher_id: teacherId })
