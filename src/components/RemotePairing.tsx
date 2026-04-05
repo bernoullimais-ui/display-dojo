@@ -65,6 +65,20 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
            return;
         }
 
+        if (isBiz) {
+          const { count } = await supabase
+            .from('sessions')
+            .select('*', { count: 'exact', head: true })
+            .eq('teacher_id', teacherId)
+            .eq('status', 'paired');
+            
+          if (count !== null && count >= 3) {
+            setStatus('error');
+            setErrorMsg('Limite de 3 TVs simultâneas atingido no plano BUSINESS. Desconecte uma TV para adicionar outra.');
+            return;
+          }
+        }
+
         // Try to insert into dojo_settings table first, in case there is a foreign key constraint
         const { error: settingsError } = await supabase.from('dojo_settings').insert([{ teacher_id: teacherId, name: 'JUDO DOJO' }]);
         if (settingsError) {

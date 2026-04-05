@@ -6,6 +6,7 @@ import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
 import DigitalClock from './components/DigitalClock';
+import AdminPanel from './components/AdminPanel';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -1702,6 +1703,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
 export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const codeFromUrl = urlParams.get('code');
+  const isAdmin = urlParams.get('admin') === 'true';
 
   const [session, setSession] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -2027,6 +2029,10 @@ export default function App() {
       />
     );
   };
+
+  if (isAdmin) {
+    return <AdminPanel />;
+  }
 
   if (isAuthLoading && viewMode === 'REMOTE') {
     return (
