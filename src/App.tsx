@@ -2448,17 +2448,17 @@ export default function App() {
               <>
                 {/* Status Bar */}
                 {!isFullscreenMedia && (
-                  <div className="fixed top-0 left-0 w-full p-8 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent z-50 pointer-events-none">
-                    <div className="flex items-center gap-6 pointer-events-auto">
+                  <div className="fixed top-0 left-0 w-full p-[3vmin] flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent z-50 pointer-events-none">
+                    <div className="flex items-center gap-[2vw] pointer-events-auto">
                       <DigitalClock />
                     </div>
-                    <div className="flex items-center gap-6 pointer-events-auto">
+                    <div className="flex items-center gap-[2vw] pointer-events-auto">
                       <button 
                         onClick={() => setViewMode('REMOTE')} 
-                        className="flex items-center gap-3 hover:bg-zinc-900/50 px-4 py-2 rounded-full transition-colors group border border-transparent hover:border-zinc-800"
+                        className="flex items-center gap-[1vw] hover:bg-zinc-900/50 px-[2vw] py-[1vh] rounded-full transition-colors group border border-transparent hover:border-zinc-800"
                       >
-                        <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-zinc-300 font-bold uppercase tracking-widest text-sm group-hover:text-white transition-colors">
+                        <div className="w-[1.5vmin] h-[1.5vmin] rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-zinc-300 font-bold uppercase tracking-widest text-[1.5vmin] group-hover:text-white transition-colors">
                           {tvName || 'DOJO DISPLAY'}
                         </span>
                       </button>
