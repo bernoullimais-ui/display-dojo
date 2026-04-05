@@ -5,6 +5,7 @@ import RemotePairing from './components/RemotePairing';
 import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
+import DigitalClock from './components/DigitalClock';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -2102,8 +2103,8 @@ export default function App() {
               <>
                 {/* Status Bar */}
                 {!isFullscreenMedia && (
-                  <div className="fixed top-0 left-0 w-full p-8 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-10">
-                    <div className="flex items-center gap-6">
+                  <div className="fixed top-0 left-0 w-full p-8 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent z-50 pointer-events-none">
+                    <div className="flex items-center gap-6 pointer-events-auto">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
                         <span className="text-zinc-500 font-mono text-sm tracking-widest">CONECTADO</span>
@@ -2118,17 +2119,20 @@ export default function App() {
                         <SmartphoneIcon size={14} /> Modo Controle
                       </button>
                     </div>
-                    <button onClick={async () => { 
-                      if (supabase && pairingCode) {
-                        await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', pairingCode);
-                      }
-                      localStorage.removeItem('dojo_tv_code');
-                      setTeacherId(null); 
-                      setPairingCode(null); 
-                    }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
-                      <LogOut size={16} />
-                      <span className="text-xs font-bold uppercase tracking-tighter">Desconectar</span>
-                    </button>
+                    <div className="flex items-start gap-8 pointer-events-auto">
+                      <DigitalClock />
+                      <button onClick={async () => { 
+                        if (supabase && pairingCode) {
+                          await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', pairingCode);
+                        }
+                        localStorage.removeItem('dojo_tv_code');
+                        setTeacherId(null); 
+                        setPairingCode(null); 
+                      }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
+                        <LogOut size={16} />
+                        <span className="text-xs font-bold uppercase tracking-tighter">Desconectar</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
