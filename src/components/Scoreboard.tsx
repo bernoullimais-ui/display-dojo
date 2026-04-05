@@ -14,7 +14,7 @@ const ScoreNumber = ({ value }: { value: number }) => (
     initial={{ scale: 1.5, filter: 'brightness(2)' }}
     animate={{ scale: 1, filter: 'brightness(1)' }}
     transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-    className="text-[9rem] font-black leading-none inline-block"
+    className="text-[15vmin] font-black leading-none inline-block"
   >
     {value}
   </motion.span>
@@ -211,21 +211,21 @@ export default function Scoreboard({
 
   const renderScore = (score: { wazaari: number, ippon: number, yuko: number, shido: number }, isBlue: boolean) => (
     <div className={`flex-1 flex flex-col items-center justify-center p-8 ${isBlue ? 'bg-blue-600 text-white' : 'bg-white text-black'}`}>
-      <div className="text-6xl font-black uppercase tracking-widest mb-12 opacity-80 text-center">
+      <div className="text-[6vmin] font-black uppercase tracking-widest mb-12 opacity-80 text-center">
         {isBlue ? displayBlueName : displayWhiteName}
       </div>
       
       <div className="flex gap-12 mb-16">
         <div className="flex flex-col items-center">
-          <span className="text-xl font-bold uppercase tracking-wider mb-4 opacity-50">Ippon</span>
+          <span className="text-[3vmin] font-bold uppercase tracking-wider mb-4 opacity-50">Ippon</span>
           <ScoreNumber value={score.ippon} />
         </div>
         <div className="flex flex-col items-center">
-          <span className="text-xl font-bold uppercase tracking-wider mb-4 opacity-50">Waza-ari</span>
+          <span className="text-[3vmin] font-bold uppercase tracking-wider mb-4 opacity-50">Waza-ari</span>
           <ScoreNumber value={score.wazaari} />
         </div>
         <div className="flex flex-col items-center">
-          <span className="text-xl font-bold uppercase tracking-wider mb-4 opacity-50">Yuko</span>
+          <span className="text-[3vmin] font-bold uppercase tracking-wider mb-4 opacity-50">Yuko</span>
           <ScoreNumber value={score.yuko} />
         </div>
       </div>
@@ -247,24 +247,24 @@ export default function Scoreboard({
   return (
     <div className="w-full h-full flex flex-col bg-zinc-900 rounded-[3rem] overflow-hidden border border-zinc-800 shadow-2xl relative">
       {/* Top Bar: Match Timer */}
-      <div className="absolute top-0 left-0 right-0 h-40 bg-black/80 backdrop-blur-md z-10 flex flex-col items-center justify-center border-b border-white/10">
+      <div className="absolute top-0 left-0 right-0 h-[20vh] bg-black/80 backdrop-blur-md z-10 flex flex-col items-center justify-center border-b border-white/10">
         {category && (
-          <div className="absolute top-4 text-zinc-400 font-bold tracking-widest uppercase text-sm">
+          <div className="absolute top-4 text-zinc-400 font-bold tracking-widest uppercase text-[2vmin]">
             {category}
           </div>
         )}
-        <div className={`text-[8rem] font-black font-mono tracking-tight leading-none mt-4 ${matchTime === 0 && !isGoldenScore ? 'text-red-500' : isGoldenScore ? 'text-amber-400' : 'text-white'}`}>
+        <div className={`text-[12vmin] font-black font-mono tracking-tight leading-none mt-4 ${matchTime === 0 && !isGoldenScore ? 'text-red-500' : isGoldenScore ? 'text-amber-400' : 'text-white'}`}>
           {isGoldenScore ? formatTime(goldenScoreTime) : formatTime(matchTime)}
         </div>
         {isGoldenScore && (
-          <div className="absolute bottom-4 text-amber-400 font-bold tracking-widest uppercase text-sm">
+          <div className="absolute bottom-4 text-amber-400 font-bold tracking-widest uppercase text-[2vmin]">
             Golden Score
           </div>
         )}
       </div>
 
       {/* Main Score Area */}
-      <div className="flex-1 flex pt-40">
+      <div className="flex-1 flex pt-[20vh]">
         {renderScore(blueScore, true)}
         {renderScore(whiteScore, false)}
       </div>
@@ -274,11 +274,11 @@ export default function Scoreboard({
         <motion.div 
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className={`absolute bottom-12 left-1/2 -translate-x-1/2 px-16 py-8 rounded-full shadow-2xl flex items-center gap-8 border-4 z-20
+          className={`absolute bottom-[5vh] left-1/2 -translate-x-1/2 px-[4vw] py-[2vh] rounded-full shadow-2xl flex items-center gap-[2vw] border-4 z-20
             ${osaekomiActive === 'blue' ? 'bg-blue-600 border-white text-white' : 'bg-white border-black text-black'}`}
         >
-          <span className="text-4xl font-black uppercase tracking-widest">Osaekomi</span>
-          <span className="text-7xl font-mono font-black">{osaekomiTime}</span>
+          <span className="text-[4vmin] font-black uppercase tracking-widest">Osaekomi</span>
+          <span className="text-[8vmin] font-mono font-black">{osaekomiTime}</span>
         </motion.div>
       )}
 
@@ -296,13 +296,13 @@ export default function Scoreboard({
             initial={{ scale: 0, rotate: -10 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', bounce: 0.5 }}
-            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-16 py-8 rounded-3xl shadow-2xl border-4 backdrop-blur-md
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-[4vw] py-[2vh] rounded-3xl shadow-2xl border-4 backdrop-blur-md
               ${winner === 'blue' ? 'bg-blue-600/90 border-white text-white' : 'bg-white/90 border-black text-black'}`}
           >
-            <div className="text-6xl font-black uppercase tracking-widest text-center">
+            <div className="text-[6vmin] font-black uppercase tracking-widest text-center">
               Vencedor
             </div>
-            <div className="text-2xl font-bold uppercase tracking-widest text-center mt-2 opacity-80">
+            <div className="text-[3vmin] font-bold uppercase tracking-widest text-center mt-2 opacity-80">
               {winner === 'blue' ? displayBlueName : displayWhiteName}
             </div>
           </motion.div>

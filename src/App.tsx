@@ -7,6 +7,7 @@ import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
 import DigitalClock from './components/DigitalClock';
 import AdminPanel from './components/AdminPanel';
+import SponsorReports from './components/SponsorReports';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv, PlusCircle, QrCode } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -16,6 +17,7 @@ interface MediaItem {
   name: string;
   url: string;
   type: 'image' | 'video';
+  sponsor_name?: string;
 }
 
 interface TimerPreset {
@@ -82,8 +84,9 @@ const getYouTubeEmbedUrl = (url: string) => {
 function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }: RemoteControlProps) {
   const [activeTvId, setActiveTvId] = useState<string>(initialPairingCode);
   const [tvSessions, setTvSessions] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB'>('TIMER');
+  const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB' | 'PLAN'>('TIMER');
   const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
+  const [planSubTab, setPlanSubTab] = useState<'INFO' | 'REPORTS'>('INFO');
   const [scoreboardConfig, setScoreboardConfig] = useState({
     blueName: 'AZUL',
     whiteName: 'BRANCO',
@@ -120,6 +123,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const [editingPreset, setEditingPreset] = useState<TimerPreset | null>(null);
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [mediaUrlInput, setMediaUrlInput] = useState('');
+  const [mediaSponsorInput, setMediaSponsorInput] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [showVolumePopup, setShowVolumePopup] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -189,6 +193,8 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const [addTvError, setAddTvError] = useState('');
   const [isAddingTv, setIsAddingTv] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [disconnectedId, setDisconnectedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isScanning) {
@@ -416,7 +422,8 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
           teacher_id: teacherId,
           name: name,
           url: mediaUrlInput,
-          type: type
+          type: type,
+          sponsor_name: mediaSponsorInput || null
         }])
         .select()
         .single();
@@ -424,6 +431,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
       if (dbError) throw dbError;
       setMediaList([mediaData, ...mediaList]);
       setMediaUrlInput('');
+      setMediaSponsorInput('');
       setShowUrlInput(false);
     } catch (error: any) {
       console.error('URL add failed:', error);
@@ -529,13 +537,15 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             teacher_id: teacherId,
             name: file.name,
             url: publicUrl,
-            type: type
+            type: type,
+            sponsor_name: mediaSponsorInput || null
           }])
           .select()
           .single();
 
         if (dbError) throw dbError;
         setMediaList([mediaData, ...mediaList]);
+        setMediaSponsorInput('');
       }
     } catch (error: any) {
       console.error('Upload failed:', error);
@@ -862,23 +872,51 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
               </button>
             </div>
             <div className="space-y-4">
-              {tvSessions.map(session => (
-                <div key={session.id} className="flex items-center justify-between bg-black p-4 rounded-2xl border border-zinc-800">
-                  <div>
-                    <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
-                    <p className="text-xs text-zinc-500 font-mono">Código: {session.id}</p>
-                  </div>
-                  <button 
-                    onClick={async () => {
-                      if (!supabase) return;
-                      await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', session.id);
-                    }}
-                    className="text-red-500 bg-red-500/10 px-3 py-2 rounded-xl text-xs font-bold uppercase hover:bg-red-500/20"
+              <AnimatePresence>
+                {tvSessions.map(session => (
+                  <motion.div 
+                    key={session.id} 
+                    initial={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0, overflow: 'hidden', marginTop: 0, marginBottom: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex items-center justify-between bg-black p-4 rounded-2xl border border-zinc-800"
                   >
-                    Desconectar
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
+                      <p className="text-xs text-zinc-500 font-mono">Código: {session.id}</p>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        if (!supabase || disconnectingId === session.id || disconnectedId === session.id) return;
+                        setDisconnectingId(session.id);
+                        
+                        // Optimistic UI: Show success state immediately
+                        setDisconnectingId(null);
+                        setDisconnectedId(session.id);
+                        
+                        // Delay the actual database update so the user can see the "Desconectado" state
+                        setTimeout(async () => {
+                          await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', session.id);
+                          setDisconnectedId(null);
+                        }, 1000);
+                      }}
+                      disabled={disconnectingId === session.id || disconnectedId === session.id}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all ${
+                        disconnectedId === session.id 
+                          ? 'text-green-500 bg-green-500/10' 
+                          : 'text-red-500 bg-red-500/10 hover:bg-red-500/20'
+                      }`}
+                    >
+                      {disconnectingId === session.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : disconnectedId === session.id ? (
+                        <Check size={14} />
+                      ) : null}
+                      {disconnectedId === session.id ? 'Desconectado' : 'Desconectar'}
+                    </button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
               {tvSessions.length === 0 && (
                 <p className="text-zinc-500 text-center text-sm">Nenhuma TV conectada.</p>
               )}
@@ -1380,21 +1418,30 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             {isStarter && showUrlInput && (
               <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
                 <p className="text-[10px] font-bold text-zinc-500 uppercase">Adicionar via URL</p>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   <input 
                     type="url" 
                     value={mediaUrlInput}
                     onChange={(e) => setMediaUrlInput(e.target.value)}
                     placeholder="https://exemplo.com/imagem.jpg"
-                    className="flex-1 bg-black border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500"
+                    className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500"
                   />
-                  <button 
-                    onClick={handleAddMediaUrl}
-                    disabled={isUploading || !mediaUrlInput}
-                    className="bg-blue-600 px-4 rounded-xl font-bold text-xs disabled:opacity-50"
-                  >
-                    OK
-                  </button>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={mediaSponsorInput}
+                      onChange={(e) => setMediaSponsorInput(e.target.value)}
+                      placeholder="Nome do Patrocinador (Opcional)"
+                      className="flex-1 bg-black border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                    <button 
+                      onClick={handleAddMediaUrl}
+                      disabled={isUploading || !mediaUrlInput}
+                      className="bg-blue-600 px-4 rounded-xl font-bold text-xs disabled:opacity-50"
+                    >
+                      OK
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1416,6 +1463,12 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                         <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white text-black p-3 rounded-full"><PlayCircle size={24} /></button>
                         <button onClick={() => deleteMedia(item.id, item.url)} className="text-red-500 p-2"><Trash2 size={20} /></button>
                       </div>
+                      {item.sponsor_name && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-2 text-center">
+                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Patrocínio</p>
+                          <p className="text-xs font-bold text-white truncate">{item.sponsor_name}</p>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1865,68 +1918,104 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
 
         {activeTab === 'PLAN' && (
           <div className="space-y-6">
-            <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Star size={120} />
-              </div>
-              <div className="relative z-10">
-                <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-500/30">
-                  <Crown className={isPro ? "text-yellow-500" : "text-zinc-500"} size={40} />
-                </div>
-                <h2 className="text-2xl font-black text-white mb-2">
-                  Plano Atual: <span className={isPro ? "text-yellow-500" : "text-zinc-400"}>{dojoSettings.subscription_tier || 'FREE'}</span>
-                </h2>
-                <p className="text-zinc-400 text-sm max-w-xs mx-auto mb-8">
-                  {isBusiness 
-                    ? 'Você tem acesso a todos os recursos do Dojo Digital, incluindo Mídias Ilimitadas e Vídeos longos.'
-                    : isPro
-                    ? 'Você está no Plano PRÓ. Faça upgrade para o BUSINESS para ter Mídias Ilimitadas.'
-                    : isStarter
-                    ? 'Você está no Plano STARTER. Faça upgrade para o PRÓ para liberar Playlists, Agenda e Letreiro.'
-                    : 'Faça upgrade para liberar Presets, Cores, Logomarca e Hub de Mídias.'}
-                </p>
-                
-                {!isBusiness && (
-                  <div className="space-y-4">
-                    <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-2xl text-left">
-                      <p className="text-xs text-yellow-500 font-medium">
-                        ⚠️ <span className="font-bold">Atenção:</span> Na página de pagamento, certifique-se de usar este mesmo email para que seu acesso seja liberado automaticamente.
-                      </p>
+            <div className="w-full flex overflow-x-auto bg-zinc-900/50 p-1 rounded-xl mb-4 hide-scrollbar">
+              <button onClick={() => setPlanSubTab('INFO')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${planSubTab === 'INFO' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Meu Plano</button>
+              <button onClick={() => setPlanSubTab('REPORTS')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${planSubTab === 'REPORTS' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Relatórios</button>
+            </div>
+
+            {planSubTab === 'INFO' && (
+              <>
+                <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-6 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Star size={120} />
+                  </div>
+                  <div className="relative z-10">
+                    <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-500/30">
+                      <Crown className={isPro ? "text-yellow-500" : "text-zinc-500"} size={40} />
                     </div>
+                    <h2 className="text-2xl font-black text-white mb-2">
+                      Plano Atual: <span className={isPro ? "text-yellow-500" : "text-zinc-400"}>{dojoSettings.subscription_tier || 'FREE'}</span>
+                    </h2>
+                    <p className="text-zinc-400 text-sm max-w-xs mx-auto mb-8">
+                      {isBusiness 
+                        ? 'Você tem acesso a todos os recursos do Dojo Digital, incluindo Mídias Ilimitadas e Vídeos longos.'
+                        : isPro
+                        ? 'Você está no Plano PRÓ. Faça upgrade para o BUSINESS para ter Mídias Ilimitadas.'
+                        : isStarter
+                        ? 'Você está no Plano STARTER. Faça upgrade para o PRÓ para liberar Playlists, Agenda e Letreiro.'
+                        : 'Faça upgrade para liberar Presets, Cores, Logomarca e Hub de Mídias.'}
+                    </p>
+                    
+                    {!isBusiness && (
+                      <div className="space-y-4">
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-2xl text-left">
+                          <p className="text-xs text-yellow-500 font-medium">
+                            ⚠️ <span className="font-bold">Atenção:</span> Na página de pagamento, certifique-se de usar este mesmo email para que seu acesso seja liberado automaticamente.
+                          </p>
+                        </div>
+                        <a 
+                          href="https://www.judotech.com.br/display-planos" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-block bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-xl shadow-blue-900/20 w-full"
+                        >
+                          Fazer Upgrade Agora
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Recursos do seu plano</h3>
+                  <ul className="space-y-3">
+                    <li className="flex items-center gap-3 text-sm">
+                      <Check size={16} className="text-green-500" />
+                      <span>Cronômetro e Placar</span>
+                    </li>
+                    <li className={`flex items-center gap-3 text-sm ${isStarter ? 'text-white' : 'text-zinc-600'}`}>
+                      {isStarter ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
+                      <span>Presets, Cores e Logomarca Customizada</span>
+                    </li>
+                    <li className={`flex items-center gap-3 text-sm ${isStarter ? 'text-white' : 'text-zinc-600'}`}>
+                      {isStarter ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
+                      <span>Hub de Mídias {isBusiness ? '(Ilimitado)' : isPro ? '(Até 6 Imagens e 2 Vídeos)' : '(Até 3 Imagens)'}</span>
+                    </li>
+                    <li className={`flex items-center gap-3 text-sm ${isPro ? 'text-white' : 'text-zinc-600'}`}>
+                      {isPro ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
+                      <span>Áudios Personalizados, Playlists, Agenda e Letreiro</span>
+                    </li>
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {planSubTab === 'REPORTS' && (
+              <div className="relative">
+                {!isBusiness && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-sm rounded-3xl p-6 text-center border border-zinc-800">
+                    <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mb-4">
+                      <Lock size={32} className="text-blue-500" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Recurso BUSINESS</h3>
+                    <p className="text-zinc-400 text-sm mb-6 max-w-xs">
+                      Os relatórios de patrocínios estão disponíveis apenas no plano BUSINESS.
+                    </p>
                     <a 
                       href="https://www.judotech.com.br/display-planos" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="inline-block bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-xl shadow-blue-900/20 w-full"
+                      className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors"
                     >
-                      Fazer Upgrade Agora
+                      Fazer Upgrade
                     </a>
                   </div>
                 )}
+                <div className={!isBusiness ? 'opacity-30 pointer-events-none' : ''}>
+                  <SponsorReports teacherId={teacherId} />
+                </div>
               </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
-              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Recursos do seu plano</h3>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-3 text-sm">
-                  <Check size={16} className="text-green-500" />
-                  <span>Cronômetro e Placar</span>
-                </li>
-                <li className={`flex items-center gap-3 text-sm ${isStarter ? 'text-white' : 'text-zinc-600'}`}>
-                  {isStarter ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
-                  <span>Presets, Cores e Logomarca Customizada</span>
-                </li>
-                <li className={`flex items-center gap-3 text-sm ${isStarter ? 'text-white' : 'text-zinc-600'}`}>
-                  {isStarter ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
-                  <span>Hub de Mídias {isBusiness ? '(Ilimitado)' : isPro ? '(Até 6 Imagens e 2 Vídeos)' : '(Até 3 Imagens)'}</span>
-                </li>
-                <li className={`flex items-center gap-3 text-sm ${isPro ? 'text-white' : 'text-zinc-600'}`}>
-                  {isPro ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
-                  <span>Áudios Personalizados, Playlists, Agenda e Letreiro</span>
-                </li>
-              </ul>
-            </div>
+            )}
           </div>
         )}
       </div>
@@ -2202,6 +2291,21 @@ export default function App() {
     return activePlaylistMedia[scheduleIndex % activePlaylistMedia.length] || null;
   }, [activePlaylistMedia, scheduleIndex]);
 
+  const currentlyDisplayedMedia = activeMedia || currentScheduledMedia;
+
+  useEffect(() => {
+    if (viewMode === 'TV' && currentlyDisplayedMedia && currentlyDisplayedMedia.sponsor_name) {
+      // Log impression
+      supabase.from('media_logs').insert({
+        teacher_id: teacherId,
+        media_id: currentlyDisplayedMedia.id,
+        sponsor_name: currentlyDisplayedMedia.sponsor_name
+      }).then(({ error }) => {
+        if (error) console.error('Error logging media:', error);
+      });
+    }
+  }, [currentlyDisplayedMedia?.id, viewMode, teacherId]);
+
   useEffect(() => {
     if (!currentScheduledMedia || activePlaylistMedia.length <= 1) return;
 
@@ -2297,7 +2401,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-12 overflow-hidden">
+    <div className="h-screen w-screen bg-black text-white flex flex-col items-center justify-center overflow-hidden">
       <AnimatePresence mode="wait">
         {showSplash ? (
           <motion.div
@@ -2338,7 +2442,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
-            className="w-full h-full flex flex-col items-center justify-center relative"
+            className="w-full h-full flex flex-col items-center justify-center relative p-4 md:p-8 lg:p-12"
           >
             {!isLoadingSettings && (
               <>
@@ -2362,7 +2466,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center h-full relative">
+                <div className="w-full h-full mx-auto flex flex-col items-center justify-center relative">
                   {/* Display Logic */}
                   {isScoreboardActive ? (
                     <div className="w-full h-full flex items-center justify-center">
@@ -2382,7 +2486,7 @@ export default function App() {
                         initialConfig={dojoSettings.timer_config}
                       />
                       {activeMedia && (
-                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'aspect-video rounded-3xl border border-zinc-800'}`}>
+                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-3xl border border-zinc-800'}`}>
                           {renderMedia(activeMedia, false)}
                         </div>
                       )}
@@ -2390,7 +2494,7 @@ export default function App() {
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {activeMedia || currentScheduledMedia ? (
-                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full max-w-5xl aspect-video rounded-[3rem] border border-zinc-800'}`}>
+                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-[3rem] border border-zinc-800'}`}>
                           {renderMedia((activeMedia || currentScheduledMedia)!, !activeMedia)}
                           {!isFullscreenMedia && (
                             <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">

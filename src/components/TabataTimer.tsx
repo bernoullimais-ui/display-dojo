@@ -348,24 +348,24 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full space-y-12">
       {/* Phase Indicator */}
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-[2vh]">
         <motion.div
           key={phase}
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           style={{ color: getPhaseColor() }}
-          className="flex items-center justify-center gap-4 text-4xl font-black tracking-widest"
+          className="flex items-center justify-center gap-[2vw] text-[4vmin] font-black tracking-widest"
         >
           {getPhaseIcon()}
           <span>{getPhaseLabel()}</span>
         </motion.div>
         
-        <div className="text-zinc-500 text-2xl font-medium">
+        <div className="text-zinc-500 text-[3vmin] font-medium">
           CICLO {currentCycle} / {config.cycles}
         </div>
 
         {/* Quick Info */}
-        <div className="flex justify-center gap-8 text-zinc-500 text-lg font-medium pt-4">
+        <div className="flex justify-center gap-[4vw] text-zinc-500 text-[2vmin] font-medium pt-[2vh]">
           <div className="flex items-center gap-2">
             <div className="text-zinc-600 text-sm">PREP</div>
             <div>{config.prepTime}s</div>
@@ -393,7 +393,7 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
             exit={{ y: -20, opacity: 0 }}
             transition={{ duration: 0.2 }}
             style={{ color: getPhaseColor() }}
-            className="text-[24rem] font-mono font-black leading-none tabular-nums"
+            className="text-[35vmin] font-mono font-black leading-none tabular-nums"
           >
             {timeLeft}
           </motion.div>
