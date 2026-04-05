@@ -18,6 +18,7 @@ interface MediaItem {
   url: string;
   type: 'image' | 'video';
   sponsor_name?: string;
+  teacher_id?: string;
 }
 
 interface TimerPreset {
@@ -152,7 +153,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
       const { data: mediaData } = await supabase
         .from('media')
         .select('*')
-        .eq('teacher_id', teacherId)
+        .in('teacher_id', [teacherId, 'GLOBAL'])
         .order('created_at', { ascending: false });
 
       const { data: scheduleData } = await supabase
@@ -164,22 +165,36 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
         .from('dojo_settings')
         .select('*')
         .eq('teacher_id', teacherId)
-        .single();
+        .maybeSingle();
+
+      const { data: globalSettingsData } = await supabase
+        .from('dojo_settings')
+        .select('*')
+        .eq('teacher_id', 'GLOBAL')
+        .maybeSingle();
 
       if (mediaData) {
         setMediaList(mediaData);
       }
       if (scheduleData) setSchedules(scheduleData);
-      if (settingsData) {
-        setDojoSettings(settingsData);
-        if (settingsData.timer_config) {
-          setLocalConfig(prev => ({ ...prev, ...settingsData.timer_config }));
+      
+      const mergedSettings = {
+        ...globalSettingsData,
+        ...settingsData,
+        name: settingsData?.name || globalSettingsData?.name || 'Meu Dojo',
+        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || ''
+      };
+
+      if (mergedSettings) {
+        setDojoSettings(mergedSettings);
+        if (mergedSettings.timer_config) {
+          setLocalConfig(prev => ({ ...prev, ...mergedSettings.timer_config }));
         }
-        if (settingsData.scoreboard_config) {
-          setScoreboardConfig(prev => ({ ...prev, ...settingsData.scoreboard_config }));
+        if (mergedSettings.scoreboard_config) {
+          setScoreboardConfig(prev => ({ ...prev, ...mergedSettings.scoreboard_config }));
         }
-        if (settingsData.ticker_config) {
-          setTickerConfig(prev => ({ ...prev, ...settingsData.ticker_config }));
+        if (mergedSettings.ticker_config) {
+          setTickerConfig(prev => ({ ...prev, ...mergedSettings.ticker_config }));
         }
       }
     };
@@ -1453,16 +1468,22 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                   return (
                     <div key={item.id} className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square">
                       {item.type === 'image' ? (
-                        <img src={item.url} className="w-full h-full object-cover" />
+                        <img src={item.url} className="w-full h-full object-cover opacity-70" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                        <div className="w-full h-full flex items-center justify-center bg-zinc-800 opacity-70">
                           {isYouTube ? <Youtube className="text-red-600" size={40} /> : <Video className="text-zinc-600" size={40} />}
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
-                        <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white text-black p-3 rounded-full"><PlayCircle size={24} /></button>
-                        <button onClick={() => deleteMedia(item.id, item.url)} className="text-red-500 p-2"><Trash2 size={20} /></button>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white/90 text-black p-4 rounded-full shadow-lg pointer-events-auto active:scale-95 transition-transform">
+                          <PlayCircle size={32} />
+                        </button>
                       </div>
+                      {item.teacher_id !== 'GLOBAL' && (
+                        <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full backdrop-blur-sm active:scale-95 transition-transform z-10">
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                       {item.sponsor_name && (
                         <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-2 text-center">
                           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Patrocínio</p>
@@ -2112,10 +2133,18 @@ export default function App() {
       const { data: scheduleData } = await supabase.from('schedules').select('*').eq('teacher_id', teacherId);
       if (scheduleData) setSchedules(scheduleData);
 
-      const { data: settingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', teacherId).single();
-      if (settingsData) setDojoSettings(settingsData);
+      const { data: settingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', teacherId).maybeSingle();
+      const { data: globalSettingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', 'GLOBAL').maybeSingle();
+      
+      const mergedSettings = {
+        ...globalSettingsData,
+        ...settingsData,
+        name: settingsData?.name || globalSettingsData?.name || 'Meu Dojo',
+        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || ''
+      };
+      if (mergedSettings) setDojoSettings(mergedSettings);
 
-      const { data: mediaData } = await supabase.from('media').select('*').eq('teacher_id', teacherId);
+      const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, 'GLOBAL']);
       if (mediaData) setMediaList(mediaData);
       
       if (pairingCode) {
