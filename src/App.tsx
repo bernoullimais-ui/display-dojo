@@ -5,7 +5,7 @@ import RemotePairing from './components/RemotePairing';
 import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
-import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings } from 'lucide-react';
+import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 interface MediaItem {
@@ -50,6 +50,7 @@ interface DojoSettings {
     active: boolean;
   };
   playlists?: Playlist[];
+  subscription_tier?: 'FREE' | 'PRO' | 'PREMIUM';
 }
 
 interface ScheduleItem {
@@ -118,6 +119,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
   const [showVolumePopup, setShowVolumePopup] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
+  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(dojoSettings.subscription_tier || '');
   const [newSchedule, setNewSchedule] = useState({
     playlist_id: '',
     day_of_week: new Date().getDay(),
@@ -648,10 +650,11 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
         </div>
       </div>
 
-      <div className="w-full grid grid-cols-3 bg-zinc-900/50 p-1">
+      <div className="w-full grid grid-cols-4 bg-zinc-900/50 p-1">
         <button onClick={() => setActiveTab('TIMER')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'TIMER' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Treino</button>
         <button onClick={() => setActiveTab('SCOREBOARD')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'SCOREBOARD' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Placar</button>
         <button onClick={() => setActiveTab('MEDIA_HUB')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'MEDIA_HUB' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Mídias</button>
+        <button onClick={() => setActiveTab('PLAN')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'PLAN' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Plano</button>
       </div>
 
       <div className="flex-1 w-full max-w-md p-6 overflow-y-auto space-y-8">
@@ -983,19 +986,37 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                   <XCircle size={20} />
                 </button>
                 <button 
-                  onClick={() => setShowUrlInput(!showUrlInput)} 
+                  onClick={() => isPro ? setShowUrlInput(!showUrlInput) : alert('Recurso Premium')} 
                   className={`p-2 rounded-full transition-colors ${showUrlInput ? 'bg-blue-500/20 text-blue-500' : 'bg-zinc-800 text-zinc-400'}`}
                 >
                   <Plus size={20} />
                 </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-blue-600 p-2 rounded-full text-white">
+                <button onClick={() => isPro ? fileInputRef.current?.click() : alert('Recurso Premium')} disabled={isUploading} className="bg-blue-600 p-2 rounded-full text-white">
                   {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
                 </button>
               </div>
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*" />
             </div>
 
-            {showUrlInput && (
+            {!isPro && (
+              <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-4 relative overflow-hidden mb-6">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Crown size={120} />
+                </div>
+                <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Lock className="text-blue-500" size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-white">Recurso Premium</h3>
+                <p className="text-zinc-400 text-sm max-w-xs mx-auto">
+                  O Hub de Mídias, Playlists e Letreiro Digital estão disponíveis apenas no Plano PRO.
+                </p>
+                <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                  Fazer Upgrade
+                </button>
+              </div>
+            )}
+
+            {isPro && showUrlInput && (
               <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
                 <p className="text-[10px] font-bold text-zinc-500 uppercase">Adicionar via URL</p>
                 <div className="flex gap-2">
@@ -1017,26 +1038,28 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              {mediaList.map((item) => {
-                const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
-                return (
-                  <div key={item.id} className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square">
-                    {item.type === 'image' ? (
-                      <img src={item.url} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-zinc-800">
-                        {isYouTube ? <Youtube className="text-red-600" size={40} /> : <Video className="text-zinc-600" size={40} />}
+            {isPro && (
+              <div className="grid grid-cols-2 gap-4">
+                {mediaList.map((item) => {
+                  const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+                  return (
+                    <div key={item.id} className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square">
+                      {item.type === 'image' ? (
+                        <img src={item.url} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                          {isYouTube ? <Youtube className="text-red-600" size={40} /> : <Video className="text-zinc-600" size={40} />}
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
+                        <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white text-black p-3 rounded-full"><PlayCircle size={24} /></button>
+                        <button onClick={() => deleteMedia(item.id, item.url)} className="text-red-500 p-2"><Trash2 size={20} /></button>
                       </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
-                      <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white text-black p-3 rounded-full"><PlayCircle size={24} /></button>
-                      <button onClick={() => deleteMedia(item.id, item.url)} className="text-red-500 p-2"><Trash2 size={20} /></button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1283,24 +1306,42 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
             {activeSubTab === 'TICKER' && (
               <div className="space-y-6">
-                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Letreiro Digital (Avisos)</h3>
-                    <button 
-                      onClick={() => updateTickerConfig('active', !tickerConfig.active)}
-                      className={`w-12 h-6 rounded-full transition-colors relative ${tickerConfig.active ? 'bg-blue-600' : 'bg-zinc-700'}`}
-                    >
-                      <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${tickerConfig.active ? 'left-7' : 'left-1'}`} />
+                {!isPro ? (
+                  <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                      <Crown size={120} />
+                    </div>
+                    <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Lock className="text-blue-500" size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-white">Recurso Premium</h3>
+                    <p className="text-zinc-400 text-sm max-w-xs mx-auto">
+                      O Letreiro Digital (Avisos) está disponível apenas no Plano PRO.
+                    </p>
+                    <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                      Fazer Upgrade
                     </button>
                   </div>
-                  <input 
-                    type="text" 
-                    placeholder="Digite o aviso que ficará passando no rodapé da TV..." 
-                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
-                    value={tickerConfig.text}
-                    onChange={(e) => updateTickerConfig('text', e.target.value)}
-                  />
-                </div>
+                ) : (
+                  <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Letreiro Digital (Avisos)</h3>
+                      <button 
+                        onClick={() => updateTickerConfig('active', !tickerConfig.active)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${tickerConfig.active ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${tickerConfig.active ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="Digite o aviso que ficará passando no rodapé da TV..." 
+                      className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
+                      value={tickerConfig.text}
+                      onChange={(e) => updateTickerConfig('text', e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -1335,29 +1376,47 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
               <div className="space-y-4">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase">Logomarca</label>
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-32 h-32 rounded-3xl bg-black border-2 border-dashed border-zinc-800 flex items-center justify-center overflow-hidden">
-                    {dojoSettings.logo_url ? (
-                      <img src={dojoSettings.logo_url} className="w-full h-full object-contain" />
-                    ) : (
-                      <ImageIcon className="text-zinc-800" size={40} />
-                    )}
+                {!isPro ? (
+                  <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-6 rounded-3xl text-center space-y-3 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                      <Crown size={80} />
+                    </div>
+                    <div className="w-12 h-12 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Lock className="text-blue-500" size={24} />
+                    </div>
+                    <h3 className="text-lg font-bold text-white">Recurso Premium</h3>
+                    <p className="text-zinc-400 text-xs max-w-xs mx-auto">
+                      A customização da logomarca está disponível apenas no Plano PRO.
+                    </p>
+                    <button className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold mt-2 hover:bg-blue-700 transition-colors text-sm">
+                      Fazer Upgrade
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => logoInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="bg-zinc-800 px-6 py-2 rounded-full text-xs font-bold hover:bg-zinc-700 transition-colors"
-                  >
-                    {isUploading ? 'Enviando...' : 'Trocar Logo'}
-                  </button>
-                  <input 
-                    type="file" 
-                    ref={logoInputRef} 
-                    onChange={(e) => handleFileUpload(e, 'LOGO')} 
-                    className="hidden" 
-                    accept="image/*" 
-                  />
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-32 h-32 rounded-3xl bg-black border-2 border-dashed border-zinc-800 flex items-center justify-center overflow-hidden">
+                      {dojoSettings.logo_url ? (
+                        <img src={dojoSettings.logo_url} className="w-full h-full object-contain" />
+                      ) : (
+                        <ImageIcon className="text-zinc-800" size={40} />
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="bg-zinc-800 px-6 py-2 rounded-full text-xs font-bold hover:bg-zinc-700 transition-colors"
+                    >
+                      {isUploading ? 'Enviando...' : 'Trocar Logo'}
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={logoInputRef} 
+                      onChange={(e) => handleFileUpload(e, 'LOGO')} 
+                      className="hidden" 
+                      accept="image/*" 
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1402,6 +1461,62 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
             )}
           </div>
         )}
+
+        {activeTab === 'PLAN' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Star size={120} />
+              </div>
+              <div className="relative z-10">
+                <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-500/30">
+                  <Crown className={isPro ? "text-yellow-500" : "text-zinc-500"} size={40} />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-2">
+                  Plano Atual: <span className={isPro ? "text-yellow-500" : "text-zinc-400"}>{dojoSettings.subscription_tier || 'FREE'}</span>
+                </h2>
+                <p className="text-zinc-400 text-sm max-w-xs mx-auto mb-8">
+                  {isPro 
+                    ? 'Você tem acesso a todos os recursos premium do Dojo Digital, incluindo Mídias, Playlists e Letreiro.'
+                    : 'Faça upgrade para o Plano PRO e libere o Hub de Mídias, Playlists, Letreiro Digital e Logomarca customizada.'}
+                </p>
+                
+                {!isPro && (
+                  <a 
+                    href="https://seusite.wixsite.com/planos" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-block bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-xl shadow-blue-900/20 w-full"
+                  >
+                    Fazer Upgrade Agora
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
+              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Recursos do Plano PRO</h3>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-3 text-sm">
+                  <Check size={16} className="text-green-500" />
+                  <span>Logomarca da Academia na TV</span>
+                </li>
+                <li className="flex items-center gap-3 text-sm">
+                  <Check size={16} className="text-green-500" />
+                  <span>Hub de Mídias (Imagens e YouTube)</span>
+                </li>
+                <li className="flex items-center gap-3 text-sm">
+                  <Check size={16} className="text-green-500" />
+                  <span>Playlists e Agendamento Automático</span>
+                </li>
+                <li className="flex items-center gap-3 text-sm">
+                  <Check size={16} className="text-green-500" />
+                  <span>Letreiro Digital (Avisos no Rodapé)</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1444,15 +1559,30 @@ export default function App() {
       setIsAuthLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error("Auth session error:", error.message);
+        // If there's an error like "Invalid Refresh Token", we should clear the session
+        supabase.auth.signOut().catch(console.error);
+        setSession(null);
+      } else {
+        setSession(session);
+      }
+      setIsAuthLoading(false);
+    }).catch((err) => {
+      console.error("Unexpected auth error:", err);
       setIsAuthLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+      } else {
+        setSession(session);
+      }
     });
 
     return () => subscription.unsubscribe();
