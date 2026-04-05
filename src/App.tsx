@@ -182,7 +182,15 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
         ...globalSettingsData,
         ...settingsData,
         name: settingsData?.name || globalSettingsData?.name || 'Meu Dojo',
-        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || ''
+        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || '',
+        scoreboard_config: {
+          ...(globalSettingsData?.scoreboard_config || {}),
+          ...(settingsData?.scoreboard_config || {})
+        },
+        timer_config: {
+          ...(globalSettingsData?.timer_config || {}),
+          ...(settingsData?.timer_config || {})
+        }
       };
 
       if (mergedSettings) {
@@ -2140,7 +2148,15 @@ export default function App() {
         ...globalSettingsData,
         ...settingsData,
         name: settingsData?.name || globalSettingsData?.name || 'Meu Dojo',
-        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || ''
+        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || '',
+        scoreboard_config: {
+          ...(globalSettingsData?.scoreboard_config || {}),
+          ...(settingsData?.scoreboard_config || {})
+        },
+        timer_config: {
+          ...(globalSettingsData?.timer_config || {}),
+          ...(settingsData?.timer_config || {})
+        }
       };
       if (mergedSettings) setDojoSettings(mergedSettings);
 
@@ -2504,6 +2520,11 @@ export default function App() {
                         blueName={scoreboardConfig.blueName}
                         whiteName={scoreboardConfig.whiteName}
                         category={scoreboardConfig.category}
+                        isFreePlan={!dojoSettings.subscription_tier || dojoSettings.subscription_tier === 'FREE'}
+                        globalSponsor={{
+                          url: dojoSettings.scoreboard_config?.free_sponsor_url,
+                          type: dojoSettings.scoreboard_config?.free_sponsor_type
+                        }}
                       />
                     </div>
                   ) : isTimerActive ? (

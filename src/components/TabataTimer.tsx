@@ -27,6 +27,11 @@ interface TabataTimerProps {
   isMuted?: boolean;
   volume?: number;
   initialConfig?: TabataConfig;
+  isFreePlan?: boolean;
+  globalSponsor?: {
+    url?: string;
+    type?: 'image' | 'video';
+  };
 }
 
 const DEFAULT_CONFIG: TabataConfig = {
@@ -36,7 +41,7 @@ const DEFAULT_CONFIG: TabataConfig = {
   cycles: 8,
 };
 
-export default function TabataTimer({ externalCommand, isMuted = true, volume = 50, initialConfig }: TabataTimerProps) {
+export default function TabataTimer({ externalCommand, isMuted = true, volume = 50, initialConfig, isFreePlan, globalSponsor }: TabataTimerProps) {
   const [config, setConfig] = useState<TabataConfig>(initialConfig || DEFAULT_CONFIG);
   const [phase, setPhase] = useState<Phase>('PREP');
   const [currentCycle, setCurrentCycle] = useState(1);
@@ -346,85 +351,110 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full space-y-12">
-      {/* Phase Indicator */}
-      <div className="text-center space-y-[2vh]">
-        <motion.div
-          key={phase}
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          style={{ color: getPhaseColor() }}
-          className="flex items-center justify-center gap-[2vw] text-[4vmin] font-black tracking-widest"
-        >
-          {getPhaseIcon()}
-          <span>{getPhaseLabel()}</span>
-        </motion.div>
-        
-        <div className="text-zinc-500 text-[3vmin] font-medium">
-          CICLO {currentCycle} / {config.cycles}
+    <div className="w-full h-full flex relative">
+      {/* Left Sponsor */}
+      {isFreePlan && globalSponsor?.url && (
+        <div className="w-[15vw] h-full bg-black border-r border-zinc-800 flex items-center justify-center overflow-hidden z-20 shrink-0">
+          {globalSponsor.type === 'video' ? (
+            <video src={globalSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
+          ) : (
+            <img src={globalSponsor.url} className="w-full h-full object-cover" />
+          )}
         </div>
+      )}
 
-        {/* Quick Info */}
-        <div className="flex justify-center gap-[4vw] text-zinc-500 text-[2vmin] font-medium pt-[2vh]">
-          <div className="flex items-center gap-2">
-            <div className="text-zinc-600 text-sm">PREP</div>
-            <div>{config.prepTime}s</div>
-          </div>
-          <div className="text-zinc-700">•</div>
-          <div className="flex items-center gap-2">
-            <div className="text-zinc-600 text-sm">WORK</div>
-            <div>{config.workTime}s</div>
-          </div>
-          <div className="text-zinc-700">•</div>
-          <div className="flex items-center gap-2">
-            <div className="text-zinc-600 text-sm">REST</div>
-            <div>{config.restTime}s</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Timer Display */}
-      <div className="relative flex items-center justify-center">
-        <AnimatePresence mode="wait">
+      {/* Main Timer Area */}
+      <div className="flex-1 flex flex-col items-center justify-center h-full space-y-12">
+        {/* Phase Indicator */}
+        <div className="text-center space-y-[2vh]">
           <motion.div
-            key={timeLeft}
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -20, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            key={phase}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
             style={{ color: getPhaseColor() }}
-            className="text-[35vmin] font-mono font-black leading-none tabular-nums"
+            className="flex items-center justify-center gap-[2vw] text-[4vmin] font-black tracking-widest"
           >
-            {timeLeft}
+            {getPhaseIcon()}
+            <span>{getPhaseLabel()}</span>
           </motion.div>
-        </AnimatePresence>
-        
-        {/* Progress Ring (Visual only for now) */}
-        <div className="absolute inset-0 -m-20 border-[20px] border-zinc-900 rounded-full opacity-20" />
+          
+          <div className="text-zinc-500 text-[3vmin] font-medium">
+            CICLO {currentCycle} / {config.cycles}
+          </div>
+
+          {/* Quick Info */}
+          <div className="flex justify-center gap-[4vw] text-zinc-500 text-[2vmin] font-medium pt-[2vh]">
+            <div className="flex items-center gap-2">
+              <div className="text-zinc-600 text-sm">PREP</div>
+              <div>{config.prepTime}s</div>
+            </div>
+            <div className="text-zinc-700">•</div>
+            <div className="flex items-center gap-2">
+              <div className="text-zinc-600 text-sm">WORK</div>
+              <div>{config.workTime}s</div>
+            </div>
+            <div className="text-zinc-700">•</div>
+            <div className="flex items-center gap-2">
+              <div className="text-zinc-600 text-sm">REST</div>
+              <div>{config.restTime}s</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Timer Display */}
+        <div className="relative flex items-center justify-center">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={timeLeft}
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ color: getPhaseColor() }}
+              className="text-[35vmin] font-mono font-black leading-none tabular-nums"
+            >
+              {timeLeft}
+            </motion.div>
+          </AnimatePresence>
+          
+          {/* Progress Ring (Visual only for now) */}
+          <div className="absolute inset-0 -m-20 border-[20px] border-zinc-900 rounded-full opacity-20" />
+        </div>
+
+        {/* Controls (For testing on TV, usually controlled via Smartphone) */}
+        <div className="flex items-center gap-12 pt-8">
+          <button
+            onClick={resetTimer}
+            className="p-6 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
+          >
+            <RotateCcw size={48} />
+          </button>
+          
+          <button
+            onClick={toggleTimer}
+            className={`p-10 rounded-full transition-all transform hover:scale-110 active:scale-95 shadow-2xl ${
+              isActive 
+                ? 'bg-zinc-800 text-white' 
+                : 'bg-blue-600 text-white hover:bg-blue-500'
+            }`}
+          >
+            {isActive ? <Pause size={80} fill="currentColor" /> : <Play size={80} fill="currentColor" className="ml-2" />}
+          </button>
+
+          <div className="w-[96px]" /> {/* Spacer to balance reset button */}
+        </div>
       </div>
 
-      {/* Controls (For testing on TV, usually controlled via Smartphone) */}
-      <div className="flex items-center gap-12 pt-8">
-        <button
-          onClick={resetTimer}
-          className="p-6 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
-        >
-          <RotateCcw size={48} />
-        </button>
-        
-        <button
-          onClick={toggleTimer}
-          className={`p-10 rounded-full transition-all transform hover:scale-110 active:scale-95 shadow-2xl ${
-            isActive 
-              ? 'bg-zinc-800 text-white' 
-              : 'bg-blue-600 text-white hover:bg-blue-500'
-          }`}
-        >
-          {isActive ? <Pause size={80} fill="currentColor" /> : <Play size={80} fill="currentColor" className="ml-2" />}
-        </button>
-
-        <div className="w-[96px]" /> {/* Spacer to balance reset button */}
-      </div>
+      {/* Right Sponsor */}
+      {isFreePlan && globalSponsor?.url && (
+        <div className="w-[15vw] h-full bg-black border-l border-zinc-800 flex items-center justify-center overflow-hidden z-20 shrink-0">
+          {globalSponsor.type === 'video' ? (
+            <video src={globalSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
+          ) : (
+            <img src={globalSponsor.url} className="w-full h-full object-cover" />
+          )}
+        </div>
+      )}
     </div>
   );
 }

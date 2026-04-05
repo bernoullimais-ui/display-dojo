@@ -6,6 +6,11 @@ interface ScoreboardProps {
   blueName?: string;
   whiteName?: string;
   category?: string;
+  isFreePlan?: boolean;
+  globalSponsor?: {
+    url?: string;
+    type?: 'image' | 'video';
+  };
 }
 
 const ScoreNumber = ({ value }: { value: number }) => (
@@ -24,7 +29,9 @@ export default function Scoreboard({
   externalCommand,
   blueName,
   whiteName,
-  category = ''
+  category = '',
+  isFreePlan,
+  globalSponsor
 }: ScoreboardProps) {
   const displayBlueName = blueName || 'AZUL';
   const displayWhiteName = whiteName || 'BRANCO';
@@ -264,17 +271,28 @@ export default function Scoreboard({
       </div>
 
       {/* Main Score Area */}
-      <div className="flex-1 flex pt-[20vh]">
+      <div className={`flex-1 flex pt-[20vh] ${isFreePlan && globalSponsor?.url ? 'pb-[15vh]' : ''}`}>
         {renderScore(blueScore, true)}
         {renderScore(whiteScore, false)}
       </div>
+
+      {/* Free Plan Sponsor Footer */}
+      {isFreePlan && globalSponsor?.url && (
+        <div className="absolute bottom-0 left-0 right-0 h-[15vh] bg-black border-t border-zinc-800 flex items-center justify-center overflow-hidden z-20">
+          {globalSponsor.type === 'video' ? (
+            <video src={globalSponsor.url} autoPlay loop muted className="w-full h-full object-contain" />
+          ) : (
+            <img src={globalSponsor.url} className="w-full h-full object-contain" />
+          )}
+        </div>
+      )}
 
       {/* Osaekomi Overlay */}
       {osaekomiActive && !winner && (
         <motion.div 
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className={`absolute bottom-[5vh] left-1/2 -translate-x-1/2 px-[4vw] py-[2vh] rounded-full shadow-2xl flex items-center gap-[2vw] border-4 z-20
+          className={`absolute ${isFreePlan && globalSponsor?.url ? 'bottom-[20vh]' : 'bottom-[5vh]'} left-1/2 -translate-x-1/2 px-[4vw] py-[2vh] rounded-full shadow-2xl flex items-center gap-[2vw] border-4 z-30
             ${osaekomiActive === 'blue' ? 'bg-blue-600 border-white text-white' : 'bg-white border-black text-black'}`}
         >
           <span className="text-[4vmin] font-black uppercase tracking-widest">Osaekomi</span>
