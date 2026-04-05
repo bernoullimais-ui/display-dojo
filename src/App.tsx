@@ -1747,13 +1747,14 @@ export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const codeFromUrl = urlParams.get('code');
   const isAdmin = urlParams.get('admin') === 'true';
+  const isRemote = urlParams.get('remote') === 'true';
 
   const [session, setSession] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [teacherId, setTeacherId] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(codeFromUrl ? codeFromUrl.toUpperCase() : null);
   const [remoteCommand, setRemoteCommand] = useState<{ type: string; payload?: any } | null>(null);
-  const [viewMode, setViewMode] = useState<'TV' | 'REMOTE'>(codeFromUrl ? 'REMOTE' : 'TV');
+  const [viewMode, setViewMode] = useState<'TV' | 'REMOTE'>((codeFromUrl || isRemote) ? 'REMOTE' : 'TV');
   const [showSplash, setShowSplash] = useState(true);
   const [activeMedia, setActiveMedia] = useState<MediaItem | null>(null);
   const [activeManualPlaylist, setActiveManualPlaylist] = useState<Playlist | null>(null);

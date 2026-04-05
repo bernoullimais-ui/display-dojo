@@ -154,15 +154,38 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex items-center gap-4 border-b border-zinc-800 pb-6">
-          <div className="bg-red-500/20 p-4 rounded-2xl">
-            <Shield className="text-red-500" size={32} />
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
+          <div className="flex items-center gap-4">
+            <div className="bg-red-500/20 p-4 rounded-2xl">
+              <Shield className="text-red-500" size={32} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black tracking-tighter">Painel Master Admin</h1>
+              <p className="text-zinc-400">Gerenciamento de Assinaturas e Dojos</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-black tracking-tighter">Painel Master Admin</h1>
-            <p className="text-zinc-400">Gerenciamento de Assinaturas e Dojos</p>
+          <div className="text-right">
+            {adminEmail ? (
+              <div className="text-sm">
+                <span className="text-zinc-500">Supabase: </span>
+                <span className={adminEmail.toLowerCase() === 'judobrunomaia@gmail.com' ? 'text-green-500 font-bold' : 'text-yellow-500 font-bold'}>
+                  {adminEmail}
+                </span>
+              </div>
+            ) : (
+              <div className="text-sm text-red-500 font-bold">
+                Não logado no Supabase
+              </div>
+            )}
           </div>
         </div>
+
+        {(!adminEmail || adminEmail.toLowerCase() !== 'judobrunomaia@gmail.com') && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 rounded-xl text-sm">
+            <strong>Atenção:</strong> Você acessou a tela do painel, mas <strong>não está logado no Supabase com o e-mail de administrador</strong>. 
+            Para que o banco de dados libere os dados, você precisa abrir o app normalmente (sem o ?admin=true), fazer login com o Google usando a conta <strong>judobrunomaia@gmail.com</strong>, e depois voltar para cá.
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-xl space-y-4">

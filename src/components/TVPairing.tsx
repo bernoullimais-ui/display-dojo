@@ -196,6 +196,16 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
           <span>Aguardando sinal do smartphone...</span>
         </div>
+
+        <div className="pt-12">
+          <a 
+            href="/?remote=true" 
+            className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors text-sm font-bold"
+          >
+            <Smartphone size={16} />
+            Acessar Dojo Remote (Login Professor)
+          </a>
+        </div>
       </motion.div>
 
       {/* Background decoration */}
