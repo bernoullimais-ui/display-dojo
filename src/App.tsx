@@ -182,6 +182,8 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
     fetchData();
   }, [teacherId]);
 
+  const [showTvManager, setShowTvManager] = useState(false);
+
   useEffect(() => {
     if (!supabase) return;
     const fetchSessions = async () => {
@@ -713,6 +715,9 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => setShowTvManager(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
+              <Tv size={16} /> TVs
+            </button>
             <button onClick={async () => {
               if (supabase) {
                 await supabase.auth.signOut();
@@ -727,6 +732,44 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
           </div>
         </div>
       </div>
+
+      {showTvManager && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl w-full max-w-md space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Gerenciar TVs</h3>
+              <button onClick={() => setShowTvManager(false)} className="text-zinc-500 hover:text-white">
+                <XCircle size={24} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {tvSessions.map(session => (
+                <div key={session.id} className="flex items-center justify-between bg-black p-4 rounded-2xl border border-zinc-800">
+                  <div>
+                    <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
+                    <p className="text-xs text-zinc-500 font-mono">Código: {session.id}</p>
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      if (!supabase) return;
+                      await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', session.id);
+                    }}
+                    className="text-red-500 bg-red-500/10 px-3 py-2 rounded-xl text-xs font-bold uppercase hover:bg-red-500/20"
+                  >
+                    Desconectar
+                  </button>
+                </div>
+              ))}
+              {tvSessions.length === 0 && (
+                <p className="text-zinc-500 text-center text-sm">Nenhuma TV conectada.</p>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500 text-center">
+              Ao desconectar, a TV voltará para a tela de código, liberando espaço na sua cota. O código da TV permanecerá o mesmo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {tvSessions.length > 1 && (
         <div className="w-full bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex gap-2 overflow-x-auto no-scrollbar">

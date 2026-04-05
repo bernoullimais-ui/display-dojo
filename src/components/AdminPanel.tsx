@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, Search, Edit2, Check, X, Loader2 } from 'lucide-react';
+import { Shield, Search, Edit2, Check, X, Loader2, Lock } from 'lucide-react';
 
 export default function AdminPanel() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -11,8 +15,21 @@ export default function AdminPanel() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (isAuthenticated) {
+      fetchUsers();
+    }
+  }, [isAuthenticated]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simple hardcoded password for master admin access
+    if (password === 'dojomaster2026') {
+      setIsAuthenticated(true);
+      setLoginError('');
+    } else {
+      setLoginError('Senha incorreta.');
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -53,6 +70,49 @@ export default function AdminPanel() {
     (u.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (u.teacher_id || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 font-sans">
+        <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl w-full max-w-md shadow-2xl">
+          <div className="flex flex-col items-center gap-4 mb-8">
+            <div className="bg-red-500/20 p-4 rounded-full">
+              <Shield className="text-red-500" size={40} />
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tighter">Acesso Restrito</h1>
+            <p className="text-zinc-400 text-center text-sm">Digite a senha master para acessar o painel de administração.</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Lock className="text-zinc-500" size={20} />
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha Master"
+                className="w-full bg-black border border-zinc-800 rounded-xl py-3 pl-12 pr-4 text-white focus:border-red-500 outline-none transition-colors"
+                autoFocus
+              />
+            </div>
+            
+            {loginError && (
+              <p className="text-red-500 text-sm text-center">{loginError}</p>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-colors"
+            >
+              Entrar
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans">
