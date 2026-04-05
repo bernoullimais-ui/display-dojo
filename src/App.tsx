@@ -2155,32 +2155,17 @@ export default function App() {
                 {!isFullscreenMedia && (
                   <div className="fixed top-0 left-0 w-full p-8 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent z-50 pointer-events-none">
                     <div className="flex items-center gap-6 pointer-events-auto">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-zinc-500 font-mono text-sm tracking-widest">CONECTADO</span>
-                      </div>
-                      {tvName && (
-                        <div className="bg-zinc-900/80 border border-zinc-800 px-4 py-1.5 rounded-full flex items-center gap-2">
-                          <Tv size={14} className="text-blue-500" />
-                          <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">{tvName}</span>
-                        </div>
-                      )}
-                      <button onClick={() => setViewMode('REMOTE')} className="text-zinc-500 hover:text-blue-400 flex items-center gap-2 text-xs font-bold uppercase border border-zinc-800 px-3 py-1 rounded-full">
-                        <SmartphoneIcon size={14} /> Modo Controle
-                      </button>
-                    </div>
-                    <div className="flex items-start gap-8 pointer-events-auto">
                       <DigitalClock />
-                      <button onClick={async () => { 
-                        if (supabase && pairingCode) {
-                          await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', pairingCode);
-                        }
-                        localStorage.removeItem('dojo_tv_code');
-                        setTeacherId(null); 
-                        setPairingCode(null); 
-                      }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
-                        <LogOut size={16} />
-                        <span className="text-xs font-bold uppercase tracking-tighter">Desconectar</span>
+                    </div>
+                    <div className="flex items-center gap-6 pointer-events-auto">
+                      <button 
+                        onClick={() => setViewMode('REMOTE')} 
+                        className="flex items-center gap-3 hover:bg-zinc-900/50 px-4 py-2 rounded-full transition-colors group border border-transparent hover:border-zinc-800"
+                      >
+                        <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-zinc-300 font-bold uppercase tracking-widest text-sm group-hover:text-white transition-colors">
+                          {tvName || 'DOJO DISPLAY'}
+                        </span>
                       </button>
                     </div>
                   </div>
