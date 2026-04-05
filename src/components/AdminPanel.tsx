@@ -6,6 +6,7 @@ export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [adminEmail, setAdminEmail] = useState<string | null>(null);
 
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,6 +14,18 @@ export default function AdminPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTier, setEditTier] = useState<string>('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    if (!supabase) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.email) {
+      setAdminEmail(session.user.email);
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -42,7 +55,7 @@ export default function AdminPanel() {
       .order('created_at', { ascending: false });
       
     if (error) {
-      setError('Erro ao buscar usuários. Verifique as permissões (RLS).');
+      setError('Erro de Permissão (RLS). Para que o painel funcione, você precisa rodar um comando SQL no seu Supabase para dar acesso ao seu email de administrador.');
       console.error(error);
     } else {
       setUsers(data || []);
@@ -82,6 +95,16 @@ export default function AdminPanel() {
             <h1 className="text-2xl font-black text-white tracking-tighter">Acesso Restrito</h1>
             <p className="text-zinc-400 text-center text-sm">Digite a senha master para acessar o painel de administração.</p>
           </div>
+
+          {!adminEmail ? (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 rounded-xl mb-6 text-sm text-center">
+              Você não está logado no Supabase. Por favor, acesse a página inicial, faça login com sua conta de administrador e depois retorne para esta página.
+            </div>
+          ) : (
+            <div className="bg-blue-500/10 border border-blue-500/20 text-blue-500 p-4 rounded-xl mb-6 text-sm text-center">
+              Logado como: <strong>{adminEmail}</strong>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="relative">
@@ -128,8 +151,16 @@ export default function AdminPanel() {
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl">
-            {error}
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-xl space-y-4">
+            <p className="font-bold text-lg">{error}</p>
+            <p className="text-sm text-red-400">Acesse o painel do Supabase &gt; SQL Editor e rode o seguinte comando:</p>
+            <pre className="bg-black/50 p-4 rounded-lg text-xs font-mono text-zinc-300 overflow-x-auto">
+{`CREATE POLICY "Admin Master Full Access" ON dojo_settings
+FOR ALL
+TO authenticated
+USING (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com')
+WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
+            </pre>
           </div>
         )}
 
