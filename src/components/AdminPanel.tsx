@@ -55,7 +55,7 @@ export default function AdminPanel() {
     const { data, error } = await supabase
       .from('dojo_settings')
       .select('*')
-      .neq('teacher_id', 'GLOBAL');
+      .neq('teacher_id', '00000000-0000-0000-0000-000000000000');
       
     if (error) {
       setError(`Erro do Supabase: ${error.message || JSON.stringify(error)}`);

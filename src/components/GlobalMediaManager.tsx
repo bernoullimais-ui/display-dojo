@@ -41,7 +41,7 @@ export default function GlobalMediaManager() {
     const { data: mediaData } = await supabase
       .from('media')
       .select('*')
-      .eq('teacher_id', 'GLOBAL');
+      .eq('teacher_id', '00000000-0000-0000-0000-000000000000');
       
     if (mediaData) setMediaList(mediaData);
 
@@ -49,7 +49,7 @@ export default function GlobalMediaManager() {
     const { data: settingsData } = await supabase
       .from('dojo_settings')
       .select('*')
-      .eq('teacher_id', 'GLOBAL')
+      .eq('teacher_id', '00000000-0000-0000-0000-000000000000')
       .single();
 
     if (settingsData) {
@@ -75,7 +75,7 @@ export default function GlobalMediaManager() {
     const { data: existing } = await supabase
       .from('dojo_settings')
       .select('scoreboard_config, timer_config')
-      .eq('teacher_id', 'GLOBAL')
+      .eq('teacher_id', '00000000-0000-0000-0000-000000000000')
       .single();
 
     const newScoreboardConfig = {
@@ -93,7 +93,7 @@ export default function GlobalMediaManager() {
     await supabase
       .from('dojo_settings')
       .upsert({
-        teacher_id: 'GLOBAL',
+        teacher_id: '00000000-0000-0000-0000-000000000000',
         name: dojoName,
         logo_url: dojoLogo,
         scoreboard_config: newScoreboardConfig,
@@ -128,7 +128,7 @@ export default function GlobalMediaManager() {
         await supabase
           .from('dojo_settings')
           .upsert({
-            teacher_id: 'GLOBAL',
+            teacher_id: '00000000-0000-0000-0000-000000000000',
             logo_url: publicUrl,
             updated_at: new Date().toISOString()
           });
@@ -137,7 +137,7 @@ export default function GlobalMediaManager() {
         setScoreboardSponsorUrl(publicUrl);
         setScoreboardSponsorType(type);
         
-        const { data: existing } = await supabase.from('dojo_settings').select('scoreboard_config').eq('teacher_id', 'GLOBAL').single();
+        const { data: existing } = await supabase.from('dojo_settings').select('scoreboard_config').eq('teacher_id', '00000000-0000-0000-0000-000000000000').single();
         const newScoreboardConfig = {
           ...(existing?.scoreboard_config || {}),
           free_sponsor_url: publicUrl,
@@ -147,7 +147,7 @@ export default function GlobalMediaManager() {
         await supabase
           .from('dojo_settings')
           .upsert({
-            teacher_id: 'GLOBAL',
+            teacher_id: '00000000-0000-0000-0000-000000000000',
             scoreboard_config: newScoreboardConfig,
             updated_at: new Date().toISOString()
           });
@@ -156,7 +156,7 @@ export default function GlobalMediaManager() {
         setTimerSponsorUrl(publicUrl);
         setTimerSponsorType(type);
         
-        const { data: existing } = await supabase.from('dojo_settings').select('timer_config').eq('teacher_id', 'GLOBAL').single();
+        const { data: existing } = await supabase.from('dojo_settings').select('timer_config').eq('teacher_id', '00000000-0000-0000-0000-000000000000').single();
         const newTimerConfig = {
           ...(existing?.timer_config || {}),
           free_sponsor_url: publicUrl,
@@ -166,7 +166,7 @@ export default function GlobalMediaManager() {
         await supabase
           .from('dojo_settings')
           .upsert({
-            teacher_id: 'GLOBAL',
+            teacher_id: '00000000-0000-0000-0000-000000000000',
             timer_config: newTimerConfig,
             updated_at: new Date().toISOString()
           });
@@ -175,7 +175,7 @@ export default function GlobalMediaManager() {
         const { data: mediaData, error: dbError } = await supabase
           .from('media')
           .insert([{
-            teacher_id: 'GLOBAL',
+            teacher_id: '00000000-0000-0000-0000-000000000000',
             name: file.name,
             url: publicUrl,
             type: type,
@@ -211,7 +211,7 @@ export default function GlobalMediaManager() {
       const { data: mediaData, error: dbError } = await supabase
         .from('media')
         .insert([{
-          teacher_id: 'GLOBAL',
+          teacher_id: '00000000-0000-0000-0000-000000000000',
           name: name,
           url: mediaUrlInput,
           type: type,

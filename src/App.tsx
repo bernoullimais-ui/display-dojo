@@ -153,7 +153,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
       const { data: mediaData } = await supabase
         .from('media')
         .select('*')
-        .in('teacher_id', [teacherId, 'GLOBAL'])
+        .in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000'])
         .order('created_at', { ascending: false });
 
       const { data: scheduleData } = await supabase
@@ -170,7 +170,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
       const { data: globalSettingsData } = await supabase
         .from('dojo_settings')
         .select('*')
-        .eq('teacher_id', 'GLOBAL')
+        .eq('teacher_id', '00000000-0000-0000-0000-000000000000')
         .maybeSingle();
 
       if (mediaData) {
@@ -2142,7 +2142,7 @@ export default function App() {
       if (scheduleData) setSchedules(scheduleData);
 
       const { data: settingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', teacherId).maybeSingle();
-      const { data: globalSettingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', 'GLOBAL').maybeSingle();
+      const { data: globalSettingsData } = await supabase.from('dojo_settings').select('*').eq('teacher_id', '00000000-0000-0000-0000-000000000000').maybeSingle();
       
       const mergedSettings = {
         ...globalSettingsData,
@@ -2160,7 +2160,7 @@ export default function App() {
       };
       if (mergedSettings) setDojoSettings(mergedSettings);
 
-      const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, 'GLOBAL']);
+      const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
       if (mediaData) setMediaList(mediaData);
       
       if (pairingCode) {
@@ -2534,6 +2534,11 @@ export default function App() {
                         isMuted={isMuted} 
                         volume={volume} 
                         initialConfig={dojoSettings.timer_config}
+                        isFreePlan={!dojoSettings.subscription_tier || dojoSettings.subscription_tier === 'FREE'}
+                        globalSponsor={{
+                          url: dojoSettings.timer_config?.free_sponsor_url,
+                          type: dojoSettings.timer_config?.free_sponsor_type
+                        }}
                       />
                       {activeMedia && (
                         <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-3xl border border-zinc-800'}`}>
