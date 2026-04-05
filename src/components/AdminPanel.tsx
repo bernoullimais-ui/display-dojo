@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, Search, Edit2, Check, X, Loader2, Lock } from 'lucide-react';
+import { Shield, Search, Edit2, Check, X, Loader2, Lock, Mail } from 'lucide-react';
 
 export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [inputEmail, setInputEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -35,12 +36,12 @@ export default function AdminPanel() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple hardcoded password for master admin access
-    if (password === 'dojomaster2026') {
+    // Simple hardcoded credentials for master admin access
+    if (inputEmail.toLowerCase().trim() === 'judobrunomaia@gmail.com' && password === 'dojomaster2026') {
       setIsAuthenticated(true);
       setLoginError('');
     } else {
-      setLoginError('Senha incorreta.');
+      setLoginError('E-mail ou senha incorretos.');
     }
   };
 
@@ -109,6 +110,20 @@ export default function AdminPanel() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Mail className="text-zinc-500" size={20} />
+              </div>
+              <input
+                type="email"
+                value={inputEmail}
+                onChange={(e) => setInputEmail(e.target.value)}
+                placeholder="E-mail do Administrador"
+                className="w-full bg-black border border-zinc-800 rounded-xl py-3 pl-12 pr-4 text-white focus:border-red-500 outline-none transition-colors"
+                autoFocus
+              />
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <Lock className="text-zinc-500" size={20} />
               </div>
               <input
@@ -117,7 +132,6 @@ export default function AdminPanel() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Senha Master"
                 className="w-full bg-black border border-zinc-800 rounded-xl py-3 pl-12 pr-4 text-white focus:border-red-500 outline-none transition-colors"
-                autoFocus
               />
             </div>
             
