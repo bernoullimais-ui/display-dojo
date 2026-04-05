@@ -119,7 +119,10 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
   const [showVolumePopup, setShowVolumePopup] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
-  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(dojoSettings.subscription_tier || '');
+  const tier = dojoSettings.subscription_tier || 'FREE';
+  const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+  const isBusiness = ['BUSINESS'].includes(tier);
   const [newSchedule, setNewSchedule] = useState({
     playlist_id: '',
     day_of_week: new Date().getDay(),
@@ -300,11 +303,23 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
   const handleAddMediaUrl = async () => {
     if (!mediaUrlInput || !supabase) return;
     
+    const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
+    const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
+    const type = isVideo ? 'video' : 'image';
+    
+    const currentImages = mediaList.filter(m => m.type === 'image').length;
+    const currentVideos = mediaList.filter(m => m.type === 'video').length;
+
+    if (type === 'video') {
+      if (!isPro) return alert('Adição de vídeos disponível a partir do plano PRÓ.');
+      if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
+    } else {
+      if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
+      if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
+    }
+
     setIsUploading(true);
     try {
-      const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
-      const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
-      const type = isVideo ? 'video' : 'image';
       let name = mediaUrlInput.split('/').pop()?.split('?')[0] || 'Mídia via URL';
       
       if (isYouTube) {
@@ -334,9 +349,45 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
     }
   };
 
+  const checkVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        resolve(video.duration);
+      };
+      video.onerror = () => reject('Erro ao carregar vídeo');
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, mode: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST' = 'MEDIA') => {
     const file = e.target.files?.[0];
     if (!file || !supabase) return;
+
+    if (mode === 'MEDIA') {
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      const currentImages = mediaList.filter(m => m.type === 'image').length;
+      const currentVideos = mediaList.filter(m => m.type === 'video').length;
+
+      if (type === 'video') {
+        if (!isPro) return alert('Upload de vídeos disponível a partir do plano PRÓ.');
+        
+        try {
+          const duration = await checkVideoDuration(file);
+          if (!isBusiness && duration > 15) return alert('No plano PRÓ, vídeos podem ter no máximo 15 segundos.');
+          if (isBusiness && duration > 30) return alert('No plano BUSINESS, vídeos podem ter no máximo 30 segundos.');
+        } catch (e) {
+          return alert('Não foi possível verificar a duração do vídeo.');
+        }
+
+        if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
+      } else {
+        if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
+        if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
+      }
+    }
 
     setIsUploading(true);
     try {
@@ -682,7 +733,15 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </motion.button>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
+            <div className={`bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6 relative ${!isStarter ? 'opacity-50 pointer-events-none' : ''}`}>
+              {!isStarter && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <div className="bg-zinc-900/90 p-3 rounded-2xl flex items-center gap-2 border border-zinc-800">
+                    <Lock size={16} className="text-blue-500" />
+                    <span className="text-xs font-bold">Recurso STARTER</span>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Presets Rápidos</h3>
                 <button onClick={() => setShowPresetManager(true)} className="text-[10px] bg-zinc-800 text-zinc-300 px-3 py-1 rounded-full font-bold uppercase tracking-wider hover:bg-zinc-700 transition-colors">Gerenciar</button>
@@ -744,7 +803,15 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </div>
             </div>
 
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 space-y-6">
+            <div className={`bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 space-y-6 relative ${!isStarter ? 'opacity-50 pointer-events-none' : ''}`}>
+              {!isStarter && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <div className="bg-zinc-900/90 p-3 rounded-2xl flex items-center gap-2 border border-zinc-800">
+                    <Lock size={16} className="text-blue-500" />
+                    <span className="text-xs font-bold">Recurso STARTER</span>
+                  </div>
+                </div>
+              )}
               <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Nomes e Cores das Fases</h3>
               <div className="space-y-6">
                 {[
@@ -775,14 +842,14 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     
                     <div className="flex items-center gap-2 pt-1">
                       <button 
-                        onClick={() => (item.ref.current as any).click()}
+                        onClick={() => isPro ? (item.ref.current as any).click() : alert('Upload de áudio disponível a partir do plano PRÓ.')}
                         className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-bold uppercase tracking-tighter transition-all ${
                           (localConfig as any)[item.audioField] 
                             ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
                             : 'bg-zinc-800/50 text-zinc-400 border border-zinc-800/50 hover:bg-zinc-800'
                         }`}
                       >
-                        <Volume2 size={12} />
+                        {!isPro ? <Lock size={12} className="text-zinc-500" /> : <Volume2 size={12} />}
                         {(localConfig as any)[item.audioField] ? 'Áudio Personalizado' : 'Subir Áudio'}
                       </button>
                       {(localConfig as any)[item.audioField] && (
@@ -835,7 +902,15 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCommand('HIDE_SCOREBOARD')} className="bg-zinc-800 py-4 rounded-2xl font-bold text-zinc-400">OCULTAR PLACAR</motion.button>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
+            <div className={`bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6 relative ${!isPro ? 'opacity-50 pointer-events-none' : ''}`}>
+              {!isPro && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <div className="bg-zinc-900/90 p-3 rounded-2xl flex items-center gap-2 border border-zinc-800">
+                    <Lock size={16} className="text-blue-500" />
+                    <span className="text-xs font-bold">Recurso PRÓ</span>
+                  </div>
+                </div>
+              )}
               <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Configuração da Luta</h3>
               
               <div className="space-y-4">
@@ -986,19 +1061,19 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                   <XCircle size={20} />
                 </button>
                 <button 
-                  onClick={() => isPro ? setShowUrlInput(!showUrlInput) : alert('Recurso Premium')} 
+                  onClick={() => isStarter ? setShowUrlInput(!showUrlInput) : alert('Recurso STARTER')} 
                   className={`p-2 rounded-full transition-colors ${showUrlInput ? 'bg-blue-500/20 text-blue-500' : 'bg-zinc-800 text-zinc-400'}`}
                 >
                   <Plus size={20} />
                 </button>
-                <button onClick={() => isPro ? fileInputRef.current?.click() : alert('Recurso Premium')} disabled={isUploading} className="bg-blue-600 p-2 rounded-full text-white">
+                <button onClick={() => isStarter ? fileInputRef.current?.click() : alert('Recurso STARTER')} disabled={isUploading} className="bg-blue-600 p-2 rounded-full text-white">
                   {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
                 </button>
               </div>
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*" />
             </div>
 
-            {!isPro && (
+            {!isStarter && (
               <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-4 relative overflow-hidden mb-6">
                 <div className="absolute top-0 right-0 p-4 opacity-10">
                   <Crown size={120} />
@@ -1006,9 +1081,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                 <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Lock className="text-blue-500" size={32} />
                 </div>
-                <h3 className="text-xl font-bold text-white">Recurso Premium</h3>
+                <h3 className="text-xl font-bold text-white">Recurso STARTER</h3>
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto">
-                  O Hub de Mídias, Playlists e Letreiro Digital estão disponíveis apenas no Plano PRO.
+                  O Hub de Mídias está disponível a partir do Plano STARTER. Playlists, Agenda e Letreiro Digital no Plano PRÓ.
                 </p>
                 <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
                   Fazer Upgrade
@@ -1016,7 +1091,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </div>
             )}
 
-            {isPro && showUrlInput && (
+            {isStarter && showUrlInput && (
               <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
                 <p className="text-[10px] font-bold text-zinc-500 uppercase">Adicionar via URL</p>
                 <div className="flex gap-2">
@@ -1038,7 +1113,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
               </div>
             )}
 
-            {isPro && (
+            {isStarter && (
               <div className="grid grid-cols-2 gap-4">
                 {mediaList.map((item) => {
                   const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
@@ -1065,6 +1140,24 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
             {activeSubTab === 'SCHEDULE' && (
           <div className="space-y-6">
+            {!isPro ? (
+              <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Crown size={120} />
+                </div>
+                <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Lock className="text-blue-500" size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-white">Recurso PRÓ</h3>
+                <p className="text-zinc-400 text-sm max-w-xs mx-auto">
+                  A Agenda está disponível a partir do Plano PRÓ.
+                </p>
+                <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                  Fazer Upgrade
+                </button>
+              </div>
+            ) : (
+              <>
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase">Tempo de Exibição de Imagens (segundos)</label>
@@ -1183,11 +1276,31 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
         )}
 
             {activeSubTab === 'PLAYLISTS' && (
               <div className="space-y-6">
+                {!isPro ? (
+                  <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                      <Crown size={120} />
+                    </div>
+                    <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Lock className="text-blue-500" size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-white">Recurso PRÓ</h3>
+                    <p className="text-zinc-400 text-sm max-w-xs mx-auto">
+                      As Playlists estão disponíveis a partir do Plano PRÓ.
+                    </p>
+                    <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                      Fazer Upgrade
+                    </button>
+                  </div>
+                ) : (
+                  <>
                 <div className="flex justify-between items-center">
                   <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Playlists</h3>
                   <button 
@@ -1301,6 +1414,8 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     )}
                   </div>
                 )}
+                </>
+                )}
               </div>
             )}
 
@@ -1376,7 +1491,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
 
               <div className="space-y-4">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase">Logomarca</label>
-                {!isPro ? (
+                {!isStarter ? (
                   <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-6 rounded-3xl text-center space-y-3 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10">
                       <Crown size={80} />
@@ -1384,9 +1499,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     <div className="w-12 h-12 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-2">
                       <Lock className="text-blue-500" size={24} />
                     </div>
-                    <h3 className="text-lg font-bold text-white">Recurso Premium</h3>
+                    <h3 className="text-lg font-bold text-white">Recurso STARTER</h3>
                     <p className="text-zinc-400 text-xs max-w-xs mx-auto">
-                      A customização da logomarca está disponível apenas no Plano PRO.
+                      A customização da logomarca está disponível a partir do Plano STARTER.
                     </p>
                     <button className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold mt-2 hover:bg-blue-700 transition-colors text-sm">
                       Fazer Upgrade
@@ -1476,42 +1591,53 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                   Plano Atual: <span className={isPro ? "text-yellow-500" : "text-zinc-400"}>{dojoSettings.subscription_tier || 'FREE'}</span>
                 </h2>
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto mb-8">
-                  {isPro 
-                    ? 'Você tem acesso a todos os recursos premium do Dojo Digital, incluindo Mídias, Playlists e Letreiro.'
-                    : 'Faça upgrade para o Plano PRO e libere o Hub de Mídias, Playlists, Letreiro Digital e Logomarca customizada.'}
+                  {isBusiness 
+                    ? 'Você tem acesso a todos os recursos do Dojo Digital, incluindo Mídias Ilimitadas e Vídeos longos.'
+                    : isPro
+                    ? 'Você está no Plano PRÓ. Faça upgrade para o BUSINESS para ter Mídias Ilimitadas.'
+                    : isStarter
+                    ? 'Você está no Plano STARTER. Faça upgrade para o PRÓ para liberar Playlists, Agenda e Letreiro.'
+                    : 'Faça upgrade para liberar Presets, Cores, Logomarca e Hub de Mídias.'}
                 </p>
                 
-                {!isPro && (
-                  <a 
-                    href="https://seusite.wixsite.com/planos" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-block bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-xl shadow-blue-900/20 w-full"
-                  >
-                    Fazer Upgrade Agora
-                  </a>
+                {!isBusiness && (
+                  <div className="space-y-4">
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-2xl text-left">
+                      <p className="text-xs text-yellow-500 font-medium">
+                        ⚠️ <span className="font-bold">Atenção:</span> Na página de pagamento, certifique-se de usar este mesmo email para que seu acesso seja liberado automaticamente.
+                      </p>
+                    </div>
+                    <a 
+                      href="https://www.judotech.com.br/pricing-plans" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-block bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-xl shadow-blue-900/20 w-full"
+                    >
+                      Fazer Upgrade Agora
+                    </a>
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
-              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Recursos do Plano PRO</h3>
+              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Recursos do seu plano</h3>
               <ul className="space-y-3">
                 <li className="flex items-center gap-3 text-sm">
                   <Check size={16} className="text-green-500" />
-                  <span>Logomarca da Academia na TV</span>
+                  <span>Cronômetro e Placar</span>
                 </li>
-                <li className="flex items-center gap-3 text-sm">
-                  <Check size={16} className="text-green-500" />
-                  <span>Hub de Mídias (Imagens e YouTube)</span>
+                <li className={`flex items-center gap-3 text-sm ${isStarter ? 'text-white' : 'text-zinc-600'}`}>
+                  {isStarter ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
+                  <span>Presets, Cores e Logomarca Customizada</span>
                 </li>
-                <li className="flex items-center gap-3 text-sm">
-                  <Check size={16} className="text-green-500" />
-                  <span>Playlists e Agendamento Automático</span>
+                <li className={`flex items-center gap-3 text-sm ${isStarter ? 'text-white' : 'text-zinc-600'}`}>
+                  {isStarter ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
+                  <span>Hub de Mídias {isBusiness ? '(Ilimitado)' : isPro ? '(Até 6 Imagens e 2 Vídeos)' : '(Até 3 Imagens)'}</span>
                 </li>
-                <li className="flex items-center gap-3 text-sm">
-                  <Check size={16} className="text-green-500" />
-                  <span>Letreiro Digital (Avisos no Rodapé)</span>
+                <li className={`flex items-center gap-3 text-sm ${isPro ? 'text-white' : 'text-zinc-600'}`}>
+                  {isPro ? <Check size={16} className="text-green-500" /> : <Lock size={16} />}
+                  <span>Áudios Personalizados, Playlists, Agenda e Letreiro</span>
                 </li>
               </ul>
             </div>
