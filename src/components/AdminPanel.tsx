@@ -52,14 +52,14 @@ export default function AdminPanel() {
     // Fetch all dojo_settings
     const { data, error } = await supabase
       .from('dojo_settings')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
       
     if (error) {
-      setError('Erro de Permissão (RLS). Para que o painel funcione, você precisa rodar um comando SQL no seu Supabase para dar acesso ao seu email de administrador.');
-      console.error(error);
+      setError(`Erro do Supabase: ${error.message || JSON.stringify(error)}`);
+      console.error('Supabase error details:', error);
     } else {
       setUsers(data || []);
+      setError('');
     }
     setLoading(false);
   };
@@ -189,15 +189,23 @@ export default function AdminPanel() {
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-xl space-y-4">
-            <p className="font-bold text-lg">{error}</p>
-            <p className="text-sm text-red-400">Acesse o painel do Supabase &gt; SQL Editor e rode o seguinte comando:</p>
-            <pre className="bg-black/50 p-4 rounded-lg text-xs font-mono text-zinc-300 overflow-x-auto">
+            <p className="font-bold text-lg">Ocorreu um erro ao buscar os dados:</p>
+            <pre className="bg-black/50 p-4 rounded-lg text-sm font-mono text-red-400 overflow-x-auto whitespace-pre-wrap">
+              {error}
+            </pre>
+            
+            {error.includes('RLS') && (
+              <>
+                <p className="text-sm text-red-400 mt-4">Se for um erro de permissão, acesse o painel do Supabase &gt; SQL Editor e rode o seguinte comando:</p>
+                <pre className="bg-black/50 p-4 rounded-lg text-xs font-mono text-zinc-300 overflow-x-auto">
 {`CREATE POLICY "Admin Master Full Access" ON dojo_settings
 FOR ALL
 TO authenticated
 USING (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com')
 WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
-            </pre>
+                </pre>
+              </>
+            )}
           </div>
         )}
 
