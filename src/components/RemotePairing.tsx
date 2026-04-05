@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2, Tv } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface RemotePairingProps {
@@ -10,8 +10,10 @@ interface RemotePairingProps {
 }
 
 export default function RemotePairing({ pairingCode, onPaired, session: authSession }: RemotePairingProps) {
-  const [status, setStatus] = useState<'connecting' | 'success' | 'error'>('connecting');
+  const [status, setStatus] = useState<'connecting' | 'naming' | 'success' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
+  const [tvName, setTvName] = useState('');
+  const [isBusiness, setIsBusiness] = useState(false);
 
   useEffect(() => {
     const connectToTV = async () => {
@@ -22,7 +24,6 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
       }
 
       try {
-        // 1. Check if session exists and is pending
         const { data: session, error: fetchError } = await supabase
           .from('sessions')
           .select('*')
@@ -43,45 +44,53 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
            return;
         }
 
-        // Unpair any existing sessions for this teacher to ensure they are only connected to one TV
-        // We do this before any pairing logic to enforce the 1-TV-per-user rule
-        await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('teacher_id', teacherId);
+        // Check tier
+        const { data: settings } = await supabase
+          .from('dojo_settings')
+          .select('subscription_tier')
+          .eq('teacher_id', teacherId)
+          .single();
+          
+        const isBiz = settings?.subscription_tier === 'BUSINESS';
+        setIsBusiness(isBiz);
 
-        if (session.status === 'paired') {
-          // Already paired, maybe we are reconnecting or taking over?
-          if (session.teacher_id !== teacherId) {
-             // Overwrite if it's a different user claiming it
-             await supabase.from('sessions').update({ teacher_id: teacherId }).eq('id', pairingCode);
-          } else {
-             // If it was the same user, we just unpaired them above, so we need to re-pair them
-             await supabase.from('sessions').update({ status: 'paired', teacher_id: teacherId }).eq('id', pairingCode);
-          }
-          setStatus('success');
-          setTimeout(() => onPaired(teacherId), 1000);
-          return;
+        if (!isBiz) {
+          // Unpair any existing sessions for this teacher if not Business
+          await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('teacher_id', teacherId);
         }
 
-        // 2. Pair! Use the authenticated user's ID
+        if (session.status === 'paired' && session.teacher_id === teacherId) {
+           setStatus('success');
+           setTimeout(() => onPaired(teacherId), 1000);
+           return;
+        }
+
         // Try to insert into dojo_settings table first, in case there is a foreign key constraint
         const { error: settingsError } = await supabase.from('dojo_settings').insert([{ teacher_id: teacherId, name: 'JUDO DOJO' }]);
         if (settingsError) {
           console.warn('Could not insert dojo_settings (might not exist or not needed):', settingsError);
         }
         
-        const { error: updateError } = await supabase
-          .from('sessions')
-          .update({ status: 'paired', teacher_id: teacherId })
-          .eq('id', pairingCode);
+        // If Business, ask for name before finalizing
+        if (isBiz) {
+          setStatus('naming');
+        } else {
+          // Finalize pairing directly
+          const { error: updateError } = await supabase
+            .from('sessions')
+            .update({ status: 'paired', teacher_id: teacherId, tv_name: 'TV Principal' })
+            .eq('id', pairingCode);
 
-        if (updateError) {
-          console.error('Update error:', updateError);
-          setStatus('error');
-          setErrorMsg(`Erro ao conectar com a TV: ${updateError.message}`);
-          return;
+          if (updateError) {
+            console.error('Update error:', updateError);
+            setStatus('error');
+            setErrorMsg(`Erro ao conectar com a TV: ${updateError.message}`);
+            return;
+          }
+
+          setStatus('success');
+          setTimeout(() => onPaired(teacherId), 1000);
         }
-
-        setStatus('success');
-        setTimeout(() => onPaired(teacherId), 1000);
 
       } catch (err) {
         setStatus('error');
@@ -89,8 +98,35 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
       }
     };
 
-    connectToTV();
-  }, [pairingCode, onPaired]);
+    if (status === 'connecting') {
+      connectToTV();
+    }
+  }, [pairingCode, onPaired, status]);
+
+  const handleNameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tvName.trim() || !supabase) return;
+    
+    const teacherId = authSession?.user?.id;
+    if (!teacherId) return;
+
+    setStatus('connecting'); // Show loading briefly
+    
+    const { error: updateError } = await supabase
+      .from('sessions')
+      .update({ status: 'paired', teacher_id: teacherId, tv_name: tvName.trim() })
+      .eq('id', pairingCode);
+
+    if (updateError) {
+      console.error('Update error:', updateError);
+      setStatus('error');
+      setErrorMsg(`Erro ao conectar com a TV: ${updateError.message}`);
+      return;
+    }
+
+    setStatus('success');
+    setTimeout(() => onPaired(teacherId), 1000);
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-white font-sans">
@@ -107,6 +143,34 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
             <h2 className="text-2xl font-bold">Conectando à TV...</h2>
             <p className="text-zinc-400">Código: <span className="font-mono text-white">{pairingCode}</span></p>
           </>
+        )}
+
+        {status === 'naming' && (
+          <form onSubmit={handleNameSubmit} className="space-y-6">
+            <div className="bg-blue-500/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
+              <Tv className="text-blue-500" size={40} />
+            </div>
+            <h2 className="text-2xl font-bold">Identifique esta TV</h2>
+            <p className="text-zinc-400 text-sm">
+              Como você está no plano BUSINESS, pode conectar várias TVs. Dê um nome para esta tela (ex: Tatame 1, Recepção).
+            </p>
+            <input 
+              type="text" 
+              value={tvName}
+              onChange={(e) => setTvName(e.target.value)}
+              placeholder="Ex: Tatame 1"
+              className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-center text-lg focus:border-blue-500 outline-none"
+              autoFocus
+              required
+            />
+            <button 
+              type="submit"
+              disabled={!tvName.trim()}
+              className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              Conectar TV
+            </button>
+          </form>
         )}
 
         {status === 'success' && (

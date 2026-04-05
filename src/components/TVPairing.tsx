@@ -15,10 +15,41 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
 
+    let activeChannel: any = null;
+
     const generateCode = async () => {
+      // Check if we have a saved code
+      const savedCode = localStorage.getItem('dojo_tv_code');
+      
+      if (savedCode) {
+        // Verify if session still exists and is valid
+        const { data: session } = await supabase
+          .from('sessions')
+          .select('*')
+          .eq('id', savedCode)
+          .single();
+
+        if (session) {
+          setPairingCode(savedCode);
+          if (session.status === 'paired' && session.teacher_id) {
+            setStatus('paired');
+            setTimeout(() => {
+              onPaired(session.teacher_id, savedCode);
+            }, 1000);
+            return;
+          } else {
+            setStatus('pending');
+            subscribeToSession(savedCode);
+            return;
+          }
+        }
+      }
+
+      // Generate new code if no saved code or session invalid
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
       setPairingCode(code);
       setStatus('pending');
+      localStorage.setItem('dojo_tv_code', code);
 
       // 1. Create a session in Supabase
       const { error } = await supabase
@@ -30,9 +61,17 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
         return;
       }
 
+      subscribeToSession(code);
+    };
+
+    const subscribeToSession = (code: string) => {
+      if (activeChannel) {
+        supabase!.removeChannel(activeChannel);
+      }
+      
       // 2. Subscribe to changes on this specific session
-      const channel = supabase
-        .channel(`session-${code}`)
+      activeChannel = supabase!
+        .channel(`session-${code}-${Math.random()}`)
         .on(
           'postgres_changes',
           {
@@ -51,13 +90,15 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           }
         )
         .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     };
 
     generateCode();
+    
+    return () => {
+      if (activeChannel) {
+        supabase!.removeChannel(activeChannel);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

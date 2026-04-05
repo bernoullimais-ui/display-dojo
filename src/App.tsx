@@ -5,7 +5,7 @@ import RemotePairing from './components/RemotePairing';
 import { Auth } from './components/Auth';
 import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
-import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star } from 'lucide-react';
+import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 interface MediaItem {
@@ -64,9 +64,9 @@ interface ScheduleItem {
 }
 
 interface RemoteControlProps {
-  pairingCode: string;
+  initialPairingCode: string;
   teacherId: string;
-  onSendCommand: (type: string, payload?: any) => void;
+  onSendCommand: (targetTvId: string, type: string, payload?: any) => void;
   onClose: () => void;
 }
 
@@ -76,7 +76,9 @@ const getYouTubeEmbedUrl = (url: string) => {
   return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=1&loop=1&playlist=${match[2]}` : null;
 };
 
-function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: RemoteControlProps) {
+function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }: RemoteControlProps) {
+  const [activeTvId, setActiveTvId] = useState<string>(initialPairingCode);
+  const [tvSessions, setTvSessions] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB'>('TIMER');
   const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
   const [scoreboardConfig, setScoreboardConfig] = useState({
@@ -178,11 +180,37 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
     fetchData();
   }, [teacherId]);
 
+  useEffect(() => {
+    if (!supabase) return;
+    const fetchSessions = async () => {
+      const { data } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('teacher_id', teacherId)
+        .eq('status', 'paired');
+      if (data) setTvSessions(data);
+    };
+    fetchSessions();
+    
+    const channel = supabase.channel(`tv-sessions-remote-${teacherId}-${Math.random()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions', filter: `teacher_id=eq.${teacherId}` }, () => {
+        fetchSessions();
+      }).subscribe();
+      
+    return () => { supabase.removeChannel(channel); };
+  }, [teacherId]);
+
+  useEffect(() => {
+    if (activeTvId !== 'ALL' && tvSessions.length > 0 && !tvSessions.find(s => s.id === activeTvId)) {
+      setActiveTvId('ALL');
+    }
+  }, [tvSessions, activeTvId]);
+
   const handleCommand = (type: string, payload?: any) => {
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
-    onSendCommand(type, payload);
+    onSendCommand(activeTvId, type, payload);
   };
 
   const updateConfig = async (field: string, value: number) => {
@@ -685,9 +713,6 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
           <div className="flex items-center gap-2">
             <button onClick={async () => {
               if (supabase) {
-                if (pairingCode) {
-                  await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', pairingCode);
-                }
                 await supabase.auth.signOut();
                 window.location.href = '/';
               }
@@ -700,6 +725,31 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
           </div>
         </div>
       </div>
+
+      {tvSessions.length > 1 && (
+        <div className="w-full bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex gap-2 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => setActiveTvId('ALL')}
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
+              activeTvId === 'ALL' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+            }`}
+          >
+            Todas as TVs (Broadcast)
+          </button>
+          {tvSessions.map(session => (
+            <button
+              key={session.id}
+              onClick={() => setActiveTvId(session.id)}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 ${
+                activeTvId === session.id ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+            >
+              <Tv size={14} />
+              {session.tv_name || 'TV'}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="w-full grid grid-cols-4 bg-zinc-900/50 p-1">
         <button onClick={() => setActiveTab('TIMER')} className={`py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'TIMER' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Treino</button>
@@ -1085,9 +1135,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                   O Hub de Mídias está disponível a partir do Plano STARTER. Playlists, Agenda e Letreiro Digital no Plano PRÓ.
                 </p>
-                <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
                   Fazer Upgrade
-                </button>
+                </a>
               </div>
             )}
 
@@ -1152,9 +1202,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                   A Agenda está disponível a partir do Plano PRÓ.
                 </p>
-                <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
                   Fazer Upgrade
-                </button>
+                </a>
               </div>
             ) : (
               <>
@@ -1295,9 +1345,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                       As Playlists estão disponíveis a partir do Plano PRÓ.
                     </p>
-                    <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
                       Fazer Upgrade
-                    </button>
+                    </a>
                   </div>
                 ) : (
                   <>
@@ -1433,9 +1483,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                       O Letreiro Digital (Avisos) está disponível apenas no Plano PRO.
                     </p>
-                    <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
                       Fazer Upgrade
-                    </button>
+                    </a>
                   </div>
                 ) : (
                   <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
@@ -1503,9 +1553,9 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                     <p className="text-zinc-400 text-xs max-w-xs mx-auto">
                       A customização da logomarca está disponível a partir do Plano STARTER.
                     </p>
-                    <button className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold mt-2 hover:bg-blue-700 transition-colors text-sm">
+                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-xl font-bold mt-2 hover:bg-blue-700 transition-colors text-sm">
                       Fazer Upgrade
-                    </button>
+                    </a>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
@@ -1608,7 +1658,7 @@ function RemoteControl({ pairingCode, teacherId, onSendCommand, onClose }: Remot
                       </p>
                     </div>
                     <a 
-                      href="https://www.judotech.com.br/pricing-plans" 
+                      href="https://www.judotech.com.br/display-planos" 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="inline-block bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-xl shadow-blue-900/20 w-full"
@@ -1706,13 +1756,27 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setSession(null);
+        if (viewMode === 'REMOTE' && !pairingCode) {
+          setTeacherId(null);
+        }
       } else {
         setSession(session);
+        if (viewMode === 'REMOTE' && !pairingCode && session) {
+          setTeacherId(session.user.id);
+        }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [viewMode, pairingCode]);
+
+  useEffect(() => {
+    if (session && viewMode === 'REMOTE' && !pairingCode && !teacherId) {
+      setTeacherId(session.user.id);
+    }
+  }, [session, viewMode, pairingCode, teacherId]);
+
+  const [tvName, setTvName] = useState<string>('');
 
   // Fetch schedules, settings, and media for TV
   useEffect(() => {
@@ -1726,11 +1790,16 @@ export default function App() {
 
       const { data: mediaData } = await supabase.from('media').select('*').eq('teacher_id', teacherId);
       if (mediaData) setMediaList(mediaData);
+      
+      if (pairingCode) {
+        const { data: sessionData } = await supabase.from('sessions').select('tv_name').eq('id', pairingCode).single();
+        if (sessionData?.tv_name) setTvName(sessionData.tv_name);
+      }
 
       setIsLoadingSettings(false);
     };
     fetchData();
-  }, [teacherId, viewMode]);
+  }, [teacherId, viewMode, pairingCode]);
 
   useEffect(() => {
     if (viewMode === 'TV' && teacherId && !isLoadingSettings) {
@@ -1746,94 +1815,105 @@ export default function App() {
   useEffect(() => {
     if (!teacherId || !pairingCode || !supabase) return;
 
+    const handleCommandUpdate = (payload: any) => {
+      if (payload.new.status === 'pending' || !payload.new.teacher_id) {
+        setTeacherId(null);
+        setPairingCode(null);
+        return;
+      }
+      
+      if (payload.new.teacher_id && payload.new.teacher_id !== teacherId) {
+        setTeacherId(payload.new.teacher_id);
+      }
+      
+      if (payload.new.last_command) {
+        const cmd = payload.new.last_command;
+        setRemoteCommand(cmd);
+        if (cmd.type === 'START') {
+          setIsTimerActive(true);
+          setIsScoreboardActive(false);
+        }
+        if (cmd.type === 'HIDE_TIMER') {
+          setIsTimerActive(false);
+        }
+        if (cmd.type === 'RESET') {
+          setActiveMedia(null);
+        }
+        if (cmd.type === 'SHOW_MEDIA') {
+          setActiveMedia(cmd.payload);
+          setActiveManualPlaylist(null);
+          setIsScoreboardActive(false);
+        }
+        if (cmd.type === 'SHOW_PLAYLIST') {
+          setActiveManualPlaylist(cmd.payload);
+          setActiveMedia(null);
+          setIsScoreboardActive(false);
+        }
+        if (cmd.type === 'TOGGLE_FULLSCREEN') {
+          setIsFullscreenMedia(prev => !prev);
+        }
+        if (cmd.type === 'STOP_MEDIA') {
+          setActiveMedia(null);
+          setActiveManualPlaylist(null);
+        }
+        if (cmd.type === 'SHOW_SCOREBOARD') {
+          setIsScoreboardActive(true);
+          setIsTimerActive(false);
+          setActiveMedia(null);
+        }
+        if (cmd.type === 'HIDE_SCOREBOARD') setIsScoreboardActive(false);
+        if (cmd.type === 'SETTINGS_UPDATE') setDojoSettings(cmd.payload);
+        if (cmd.type === 'TOGGLE_MUTE') setIsMuted(cmd.payload);
+        if (cmd.type === 'SET_VOLUME') setVolume(cmd.payload);
+        
+        if (cmd.type === 'SCOREBOARD_SET_NAMES') {
+          setScoreboardConfig(prev => ({
+            ...prev,
+            blueName: cmd.payload.blue !== undefined ? cmd.payload.blue : prev.blueName,
+            whiteName: cmd.payload.white !== undefined ? cmd.payload.white : prev.whiteName
+          }));
+        }
+        if (cmd.type === 'SCOREBOARD_SET_CATEGORY') {
+          setScoreboardConfig(prev => ({ ...prev, category: cmd.payload }));
+        }
+        if (cmd.type === 'TICKER_UPDATE') {
+          setTickerConfig(cmd.payload);
+        }
+      }
+    };
+
     const channel = supabase
-      .channel(`remote-control-${pairingCode}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${pairingCode}` }, (payload) => {
-        if (payload.new.status === 'pending' || !payload.new.teacher_id) {
-          setTeacherId(null);
-          setPairingCode(null);
-          return;
-        }
-        
-        if (payload.new.teacher_id && payload.new.teacher_id !== teacherId) {
-          setTeacherId(payload.new.teacher_id);
-        }
-        
-        if (payload.new.last_command) {
-          const cmd = payload.new.last_command;
-          setRemoteCommand(cmd);
-          if (cmd.type === 'START') {
-            setIsTimerActive(true);
-            setIsScoreboardActive(false);
-          }
-          if (cmd.type === 'HIDE_TIMER') {
-            setIsTimerActive(false);
-          }
-          if (cmd.type === 'RESET') {
-            setActiveMedia(null);
-          }
-          if (cmd.type === 'SHOW_MEDIA') {
-            setActiveMedia(cmd.payload);
-            setActiveManualPlaylist(null);
-            setIsScoreboardActive(false);
-          }
-          if (cmd.type === 'SHOW_PLAYLIST') {
-            setActiveManualPlaylist(cmd.payload);
-            setActiveMedia(null);
-            setIsScoreboardActive(false);
-          }
-          if (cmd.type === 'TOGGLE_FULLSCREEN') {
-            setIsFullscreenMedia(prev => !prev);
-          }
-          if (cmd.type === 'STOP_MEDIA') {
-            setActiveMedia(null);
-            setActiveManualPlaylist(null);
-          }
-          if (cmd.type === 'SHOW_SCOREBOARD') {
-            setIsScoreboardActive(true);
-            setIsTimerActive(false);
-            setActiveMedia(null);
-          }
-          if (cmd.type === 'HIDE_SCOREBOARD') setIsScoreboardActive(false);
-          if (cmd.type === 'SETTINGS_UPDATE') setDojoSettings(cmd.payload);
-          if (cmd.type === 'TOGGLE_MUTE') setIsMuted(cmd.payload);
-          if (cmd.type === 'SET_VOLUME') setVolume(cmd.payload);
-          
-          if (cmd.type === 'SCOREBOARD_SET_NAMES') {
-            setScoreboardConfig(prev => ({
-              ...prev,
-              blueName: cmd.payload.blue !== undefined ? cmd.payload.blue : prev.blueName,
-              whiteName: cmd.payload.white !== undefined ? cmd.payload.white : prev.whiteName
-            }));
-          }
-          if (cmd.type === 'SCOREBOARD_SET_CATEGORY') {
-            setScoreboardConfig(prev => ({ ...prev, category: cmd.payload }));
-          }
-          if (cmd.type === 'TICKER_UPDATE') {
-            setTickerConfig(cmd.payload);
-          }
-        }
-      })
+      .channel(`remote-control-${pairingCode}-${Math.random()}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${pairingCode}` }, handleCommandUpdate)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [teacherId, pairingCode]);
 
-  const sendRemoteCommand = async (commandType: string, payload?: any) => {
-    if (!pairingCode || !supabase) return;
+  const sendRemoteCommand = async (targetTvId: string, commandType: string, payload?: any) => {
+    if (!supabase) return;
     
-    const { error } = await supabase
-      .from('sessions')
-      .update({ 
-        last_command: { 
-          type: commandType, 
-          payload, 
-          timestamp: new Date().toISOString() 
-        } 
-      })
-      .eq('id', pairingCode);
+    const updateData = { 
+      last_command: { 
+        type: commandType, 
+        payload, 
+        timestamp: new Date().toISOString() 
+      } 
+    };
 
-    if (error) console.error('Error sending command:', error);
+    if (targetTvId === 'ALL') {
+      const { error } = await supabase
+        .from('sessions')
+        .update(updateData)
+        .eq('teacher_id', teacherId);
+      if (error) console.error('Error sending broadcast command:', error);
+    } else {
+      const { error } = await supabase
+        .from('sessions')
+        .update(updateData)
+        .eq('id', targetTvId);
+      if (error) console.error('Error sending command:', error);
+    }
   };
 
   const [scheduleIndex, setScheduleIndex] = useState(0);
@@ -1966,8 +2046,8 @@ export default function App() {
     return <TVPairing onPaired={(id, code) => { setTeacherId(id); setPairingCode(code); }} />;
   }
 
-  if (viewMode === 'REMOTE' && pairingCode) {
-    return <RemoteControl pairingCode={pairingCode} teacherId={teacherId} onSendCommand={sendRemoteCommand} onClose={() => {
+  if (viewMode === 'REMOTE') {
+    return <RemoteControl initialPairingCode={pairingCode || 'ALL'} teacherId={teacherId} onSendCommand={sendRemoteCommand} onClose={() => {
       // Clear URL parameter when closing remote
       window.history.replaceState({}, document.title, window.location.pathname);
       setViewMode('TV');
@@ -2028,11 +2108,24 @@ export default function App() {
                         <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
                         <span className="text-zinc-500 font-mono text-sm tracking-widest">CONECTADO</span>
                       </div>
+                      {tvName && (
+                        <div className="bg-zinc-900/80 border border-zinc-800 px-4 py-1.5 rounded-full flex items-center gap-2">
+                          <Tv size={14} className="text-blue-500" />
+                          <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">{tvName}</span>
+                        </div>
+                      )}
                       <button onClick={() => setViewMode('REMOTE')} className="text-zinc-500 hover:text-blue-400 flex items-center gap-2 text-xs font-bold uppercase border border-zinc-800 px-3 py-1 rounded-full">
                         <SmartphoneIcon size={14} /> Modo Controle
                       </button>
                     </div>
-                    <button onClick={() => { setTeacherId(null); setPairingCode(null); }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
+                    <button onClick={async () => { 
+                      if (supabase && pairingCode) {
+                        await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', pairingCode);
+                      }
+                      localStorage.removeItem('dojo_tv_code');
+                      setTeacherId(null); 
+                      setPairingCode(null); 
+                    }} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
                       <LogOut size={16} />
                       <span className="text-xs font-bold uppercase tracking-tighter">Desconectar</span>
                     </button>
