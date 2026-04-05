@@ -7,8 +7,9 @@ import TabataTimer from './components/TabataTimer';
 import Scoreboard from './components/Scoreboard';
 import DigitalClock from './components/DigitalClock';
 import AdminPanel from './components/AdminPanel';
-import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv } from 'lucide-react';
+import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv, PlusCircle, QrCode } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 interface MediaItem {
   id: string;
@@ -183,6 +184,57 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   }, [teacherId]);
 
   const [showTvManager, setShowTvManager] = useState(false);
+  const [showAddTv, setShowAddTv] = useState(false);
+  const [newTvCode, setNewTvCode] = useState('');
+  const [addTvError, setAddTvError] = useState('');
+  const [isAddingTv, setIsAddingTv] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+
+  useEffect(() => {
+    if (isScanning) {
+      const scanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        /* verbose= */ false
+      );
+
+      scanner.render(
+        (decodedText) => {
+          // The QR code contains the URL, e.g., https://app.com/?code=A1B2C3
+          try {
+            const url = new URL(decodedText);
+            const code = url.searchParams.get('code');
+            if (code) {
+              setNewTvCode(code);
+              setIsScanning(false);
+              scanner.clear();
+            } else {
+              // Maybe it's just the code itself
+              if (decodedText.length === 6) {
+                setNewTvCode(decodedText);
+                setIsScanning(false);
+                scanner.clear();
+              }
+            }
+          } catch (e) {
+            // Not a URL, maybe just the code
+            if (decodedText.length === 6) {
+              setNewTvCode(decodedText);
+              setIsScanning(false);
+              scanner.clear();
+            }
+          }
+        },
+        (error) => {
+          // Ignore scan errors (happens when no QR code is in frame)
+        }
+      );
+
+      return () => {
+        scanner.clear().catch(console.error);
+      };
+    }
+  }, [isScanning]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -515,6 +567,73 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
     handleCommand('TOGGLE_MUTE', newMuted);
   };
 
+  const handleAddTv = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTvCode.trim() || !supabase) return;
+    
+    setIsAddingTv(true);
+    setAddTvError('');
+    
+    try {
+      const code = newTvCode.trim().toUpperCase();
+      const { data: session, error: fetchError } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('id', code)
+        .single();
+
+      if (fetchError || !session) {
+        setAddTvError('Código inválido ou expirado.');
+        setIsAddingTv(false);
+        return;
+      }
+
+      // Check tier
+      const { data: settings } = await supabase
+        .from('dojo_settings')
+        .select('subscription_tier')
+        .eq('teacher_id', teacherId)
+        .single();
+        
+      const isBiz = settings?.subscription_tier === 'BUSINESS';
+
+      if (!isBiz) {
+        // Unpair any existing sessions for this teacher if not Business
+        await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('teacher_id', teacherId);
+      } else {
+        const { count } = await supabase
+          .from('sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('teacher_id', teacherId)
+          .eq('status', 'paired');
+          
+        if (count !== null && count >= 3) {
+          setAddTvError('Limite de 3 TVs simultâneas atingido no plano BUSINESS.');
+          setIsAddingTv(false);
+          return;
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('sessions')
+        .update({ status: 'paired', teacher_id: teacherId, tv_name: isBiz ? `TV ${tvSessions.length + 1}` : 'TV Principal' })
+        .eq('id', code);
+
+      if (updateError) {
+        setAddTvError(`Erro ao conectar: ${updateError.message}`);
+        setIsAddingTv(false);
+        return;
+      }
+
+      setNewTvCode('');
+      setShowAddTv(false);
+      setActiveTvId(code); // Switch to the new TV
+    } catch (err) {
+      setAddTvError('Erro inesperado ao conectar.');
+    }
+    setIsAddingTv(false);
+  };
+
   const updateVolume = (val: number) => {
     setVolume(val);
     handleCommand('SET_VOLUME', val);
@@ -718,6 +837,9 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             <button onClick={() => setShowTvManager(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
               <Tv size={16} /> TVs
             </button>
+            <button onClick={() => setShowAddTv(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
+              <PlusCircle size={16} /> Incluir TV
+            </button>
             <button onClick={async () => {
               if (supabase) {
                 await supabase.auth.signOut();
@@ -725,9 +847,6 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
               }
             }} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-red-500">
               <LogOut size={16} /> Sair
-            </button>
-            <button onClick={onClose} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
-              <Monitor size={16} /> TV
             </button>
           </div>
         </div>
@@ -767,6 +886,78 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             <p className="text-xs text-zinc-500 text-center">
               Ao desconectar, a TV voltará para a tela de código, liberando espaço na sua cota. O código da TV permanecerá o mesmo.
             </p>
+          </div>
+        </div>
+      )}
+
+      {showAddTv && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl w-full max-w-md space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Incluir Nova TV</h3>
+              <button onClick={() => { setShowAddTv(false); setIsScanning(false); }} className="text-zinc-500 hover:text-white">
+                <XCircle size={24} />
+              </button>
+            </div>
+            
+            {isScanning ? (
+              <div className="space-y-4">
+                <div id="reader" className="w-full bg-black rounded-xl overflow-hidden border border-zinc-800"></div>
+                <button 
+                  onClick={() => setIsScanning(false)}
+                  className="w-full bg-zinc-800 text-white py-3 rounded-xl font-bold hover:bg-zinc-700 transition-colors"
+                >
+                  Cancelar Leitura
+                </button>
+              </div>
+            ) : (
+              <>
+                <form onSubmit={handleAddTv} className="space-y-4">
+                  {addTvError && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-xl text-sm">
+                      {addTvError}
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-zinc-500 mb-2">Código da TV</label>
+                    <input 
+                      type="text" 
+                      value={newTvCode}
+                      onChange={(e) => setNewTvCode(e.target.value)}
+                      placeholder="Ex: A1B2C3"
+                      className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-center text-2xl font-mono focus:border-blue-500 outline-none uppercase"
+                      autoFocus
+                      required
+                      maxLength={6}
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    disabled={isAddingTv || newTvCode.length < 6}
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isAddingTv ? <Loader2 className="animate-spin" size={20} /> : <PlusCircle size={20} />}
+                    Sintonizar TV
+                  </button>
+                </form>
+
+                <div className="relative flex items-center py-2">
+                  <div className="flex-grow border-t border-zinc-800"></div>
+                  <span className="flex-shrink-0 mx-4 text-zinc-500 text-xs uppercase font-bold">ou</span>
+                  <div className="flex-grow border-t border-zinc-800"></div>
+                </div>
+
+                <button 
+                  onClick={() => setIsScanning(true)}
+                  className="w-full bg-zinc-800 text-white py-4 rounded-xl font-bold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <QrCode size={20} />
+                  Ler QR Code
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
