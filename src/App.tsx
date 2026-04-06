@@ -880,7 +880,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
       <div className="w-full p-6 flex justify-between items-center border-b border-zinc-900">
         <div className="flex items-center gap-2">
           <SmartphoneIcon size={20} className="text-blue-500" />
-          <span className="font-bold tracking-tighter">DOJO REMOTE</span>
+          <span className="font-bold tracking-tighter">DOJO REMOTE ({dojoSettings.name})</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">

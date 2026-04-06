@@ -111,7 +111,7 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           </div>
           <h2 className="text-2xl font-bold">Configuração Necessária</h2>
           <p className="text-zinc-400">
-            Para que o **DojoDisplay** funcione, você precisa configurar as chaves do Supabase no painel de **Settings** do AI Studio.
+            Para que o **TV DOJO** funcione, você precisa configurar as chaves do Supabase no painel de **Settings** do AI Studio.
           </p>
           <div className="text-left bg-black p-4 rounded-xl font-mono text-xs text-zinc-500 space-y-2 border border-zinc-800">
             <div>VITE_SUPABASE_URL</div>
@@ -153,7 +153,7 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           </div>
           
           <h1 className="text-5xl font-bold tracking-tight">
-            {status === 'paired' ? 'Conectado!' : 'Conectar DojoDisplay'}
+            {status === 'paired' ? 'Conectado!' : 'Conectar TV DOJO'}
           </h1>
           <p className="text-zinc-400 text-xl max-w-md mx-auto">
             {status === 'paired' 

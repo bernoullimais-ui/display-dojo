@@ -1,7 +1,7 @@
 {
-  "name": "Judo Dojo Remote",
-  "short_name": "DojoRemote",
-  "description": "Controle remoto para o placar do Judo Dojo",
+  "name": "TV DOJO",
+  "short_name": "TV DOJO",
+  "description": "Controle remoto para o TV DOJO",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
