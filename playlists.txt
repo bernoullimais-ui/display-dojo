@@ -1,0 +1,78 @@
+38:interface Playlist {
+56:  playlists?: Playlist[];
+63:  playlist_id?: string;
+80:  return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=1&loop=1&playlist=${match[2]}` : null;
+87:  const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
+124:  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
+136:    playlist_id: '',
+343:  const updatePlaylists = async (newPlaylists: Playlist[]) => {
+344:    const newSettings = { ...dojoSettings, playlists: newPlaylists };
+347:      await supabase.from('dojo_settings').update({ playlists: newPlaylists }).eq('teacher_id', teacherId);
+693:    if (!newSchedule.playlist_id) return alert('Selecione uma playlist!');
+697:      playlist_id: newSchedule.playlist_id,
+711:      setNewSchedule(prev => ({ ...prev, playlist_id: '' }));
+1401:              <button onClick={() => setActiveSubTab('PLAYLISTS')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'PLAYLISTS' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Playlists</button>
+1449:                  O Hub de Mídias está disponível a partir do Plano STARTER. Playlists, Agenda e Letreiro Digital no Plano PRÓ.
+1573:                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Playlist</label>
+1575:                    value={newSchedule.playlist_id}
+1576:                    onChange={(e) => setNewSchedule(prev => ({ ...prev, playlist_id: e.target.value }))}
+1579:                    <option value="">Selecione uma playlist...</option>
+1580:                    {(dojoSettings.playlists || []).map(p => (
+1633:                const playlist = dojoSettings.playlists?.find(p => p.id === s.playlist_id);
+1644:                        <span className="text-blue-400 truncate max-w-[120px]">{playlist?.name || 'Playlist Removida'}</span>
+1668:            {activeSubTab === 'PLAYLISTS' && (
+1680:                      As Playlists estão disponíveis a partir do Plano PRÓ.
+1689:                  <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Playlists</h3>
+1691:                    onClick={() => setEditingPlaylist({ id: Math.random().toString(), name: 'Nova Playlist', media_ids: [] })}
+1698:                {editingPlaylist ? (
+1701:                      <h3 className="font-bold">Editar Playlist</h3>
+1702:                      <button onClick={() => setEditingPlaylist(null)} className="text-zinc-500 hover:text-white"><XCircle size={20} /></button>
+1706:                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Nome da Playlist</label>
+1709:                        value={editingPlaylist.name}
+1710:                        onChange={(e) => setEditingPlaylist({ ...editingPlaylist, name: e.target.value })}
+1716:                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Mídias ({editingPlaylist.media_ids.length})</label>
+1722:                              setEditingPlaylist(prev => {
+1730:                            className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${editingPlaylist.media_ids.includes(m.id) ? 'border-blue-500 scale-95' : 'border-transparent hover:border-zinc-700'}`}
+1733:                            {editingPlaylist.media_ids.includes(m.id) && (
+1746:                          const newPlaylists = (dojoSettings.playlists || []).filter(p => p.id !== editingPlaylist.id);
+1747:                          updatePlaylists(newPlaylists);
+1748:                          setEditingPlaylist(null);
+1756:                          const exists = (dojoSettings.playlists || []).find(p => p.id === editingPlaylist.id);
+1757:                          const newPlaylists = exists 
+1758:                            ? (dojoSettings.playlists || []).map(p => p.id === editingPlaylist.id ? editingPlaylist : p)
+1759:                            : [...(dojoSettings.playlists || []), editingPlaylist];
+1760:                          updatePlaylists(newPlaylists);
+1761:                          setEditingPlaylist(null);
+1771:                    {(!dojoSettings.playlists || dojoSettings.playlists.length === 0) ? (
+1773:                        <p className="text-zinc-500 text-sm">Nenhuma playlist criada.</p>
+1776:                      dojoSettings.playlists.map(playlist => (
+1777:                        <div key={playlist.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
+1779:                            <h4 className="font-bold">{playlist.name}</h4>
+1780:                            <p className="text-xs text-zinc-500">{playlist.media_ids.length} mídias</p>
+1784:                              onClick={() => handleCommand('SHOW_PLAYLIST', playlist)}
+1790:                              onClick={() => setEditingPlaylist(playlist)}
+2023:                        ? 'Você está no Plano STARTER. Faça upgrade para o PRÓ para liberar Playlists, Agenda e Letreiro.'
+2064:                      <span>Áudios Personalizados, Playlists, Agenda e Letreiro</span>
+2118:  const [activeManualPlaylist, setActiveManualPlaylist] = useState<Playlist | null>(null);
+2265:          setActiveManualPlaylist(null);
+2268:        if (cmd.type === 'SHOW_PLAYLIST') {
+2269:          setActiveManualPlaylist(cmd.payload);
+2278:          setActiveManualPlaylist(null);
+2350:    if (isTimerActive || activeMedia || activeManualPlaylist) return []; // Priority: Timer > Manual Media/Playlist > Schedule
+2362:  }, [schedules, isTimerActive, activeMedia, activeManualPlaylist, currentClock]);
+2364:  const activePlaylistMedia = useMemo(() => {
+2365:    if (activeManualPlaylist) {
+2366:      return activeManualPlaylist.media_ids
+2374:    const playlist = dojoSettings.playlists?.find(p => p.id === activeSchedule.playlist_id);
+2375:    if (!playlist) return [];
+2378:    return playlist.media_ids
+2381:  }, [activeSchedules, dojoSettings.playlists, mediaList, activeManualPlaylist]);
+2384:    if (activePlaylistMedia.length === 0) return null;
+2385:    return activePlaylistMedia[scheduleIndex % activePlaylistMedia.length] || null;
+2386:  }, [activePlaylistMedia, scheduleIndex]);
+2404:    if (!currentScheduledMedia || activePlaylistMedia.length <= 1) return;
+2420:  }, [currentScheduledMedia, activePlaylistMedia.length, dojoSettings.timer_config?.imageDuration]);
+2427:    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=${muteParam}&loop=${loopParam}&playlist=${match[2]}` : null;
+2431:    const shouldLoop = !isScheduled || activePlaylistMedia.length <= 1;
+2602:                                {activeMedia || activeManualPlaylist ? <PlayCircle className="text-blue-500" /> : <Calendar className="text-amber-500" />}
+2603:                                {activeMedia ? 'AO VIVO' : activeManualPlaylist ? 'PLAYLIST' : 'PROGRAMADO'}

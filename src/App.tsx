@@ -54,7 +54,8 @@ interface DojoSettings {
     active: boolean;
   };
   playlists?: Playlist[];
-  subscription_tier?: 'FREE' | 'PRO' | 'PREMIUM';
+  tv_playlists?: Record<string, string>;
+  subscription_tier?: 'FREE' | 'STARTER' | 'PRO' | 'PREMIUM' | 'BUSINESS';
 }
 
 interface ScheduleItem {
@@ -196,8 +197,8 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
         setDojoSettings(mergedSettings);
         setDojoForm({
           name: mergedSettings.name || '',
-          city: mergedSettings.timer_config?.city || '',
-          state: mergedSettings.timer_config?.state || ''
+          city: mergedSettings.city || mergedSettings.timer_config?.city || '',
+          state: mergedSettings.state || mergedSettings.timer_config?.state || ''
         });
         if (mergedSettings.timer_config) {
           setLocalConfig(prev => ({ ...prev, ...mergedSettings.timer_config }));
@@ -345,6 +346,15 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
     setDojoSettings(newSettings);
     if (supabase && teacherId) {
       await supabase.from('dojo_settings').update({ playlists: newPlaylists }).eq('teacher_id', teacherId);
+    }
+  };
+
+  const updateTvPlaylist = async (tvId: string, playlistId: string) => {
+    const newTvPlaylists = { ...(dojoSettings.tv_playlists || {}), [tvId]: playlistId };
+    const newSettings = { ...dojoSettings, tv_playlists: newTvPlaylists };
+    setDojoSettings(newSettings);
+    if (supabase && teacherId) {
+      await supabase.from('dojo_settings').update({ tv_playlists: newTvPlaylists }).eq('teacher_id', teacherId);
     }
   };
 
@@ -591,21 +601,19 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
       return;
     }
 
-    const newConfig = { ...localConfig, city: dojoForm.city, state: dojoForm.state };
-    setLocalConfig(newConfig);
-
     const { error } = await supabase
       .from('dojo_settings')
       .upsert({
         teacher_id: teacherId,
         name: dojoForm.name,
-        timer_config: newConfig,
+        city: dojoForm.city,
+        state: dojoForm.state,
         updated_at: new Date().toISOString()
       });
     
     if (!error) {
-      setDojoSettings(prev => ({ ...prev, name: dojoForm.name, timer_config: newConfig }));
-      handleCommand('SETTINGS_UPDATE', { ...dojoSettings, name: dojoForm.name, timer_config: newConfig });
+      setDojoSettings(prev => ({ ...prev, name: dojoForm.name, city: dojoForm.city, state: dojoForm.state }));
+      handleCommand('SETTINGS_UPDATE', { ...dojoSettings, name: dojoForm.name, city: dojoForm.city, state: dojoForm.state });
       alert('Configurações do Dojo salvas com sucesso!');
     } else {
       alert('Erro ao salvar configurações.');
@@ -920,41 +928,58 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                     initial={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0, overflow: 'hidden', marginTop: 0, marginBottom: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="flex items-center justify-between bg-black p-4 rounded-2xl border border-zinc-800"
+                    className="flex flex-col gap-3 bg-black p-4 rounded-2xl border border-zinc-800"
                   >
-                    <div>
-                      <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
-                      <p className="text-xs text-zinc-500 font-mono">Código: {session.id}</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
+                        <p className="text-xs text-zinc-500 font-mono">Código: {session.id}</p>
+                      </div>
+                      <button 
+                        onClick={async () => {
+                          if (!supabase || disconnectingId === session.id || disconnectedId === session.id) return;
+                          setDisconnectingId(session.id);
+                          
+                          // Optimistic UI: Show success state immediately
+                          setDisconnectingId(null);
+                          setDisconnectedId(session.id);
+                          
+                          // Delay the actual database update so the user can see the "Desconectado" state
+                          setTimeout(async () => {
+                            await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', session.id);
+                            setDisconnectedId(null);
+                          }, 1000);
+                        }}
+                        disabled={disconnectingId === session.id || disconnectedId === session.id}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all ${
+                          disconnectedId === session.id 
+                            ? 'text-green-500 bg-green-500/10' 
+                            : 'text-red-500 bg-red-500/10 hover:bg-red-500/20'
+                        }`}
+                      >
+                        {disconnectingId === session.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : disconnectedId === session.id ? (
+                          <Check size={14} />
+                        ) : null}
+                        {disconnectedId === session.id ? 'Desconectado' : 'Desconectar'}
+                      </button>
                     </div>
-                    <button 
-                      onClick={async () => {
-                        if (!supabase || disconnectingId === session.id || disconnectedId === session.id) return;
-                        setDisconnectingId(session.id);
-                        
-                        // Optimistic UI: Show success state immediately
-                        setDisconnectingId(null);
-                        setDisconnectedId(session.id);
-                        
-                        // Delay the actual database update so the user can see the "Desconectado" state
-                        setTimeout(async () => {
-                          await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('id', session.id);
-                          setDisconnectedId(null);
-                        }, 1000);
-                      }}
-                      disabled={disconnectingId === session.id || disconnectedId === session.id}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all ${
-                        disconnectedId === session.id 
-                          ? 'text-green-500 bg-green-500/10' 
-                          : 'text-red-500 bg-red-500/10 hover:bg-red-500/20'
-                      }`}
-                    >
-                      {disconnectingId === session.id ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : disconnectedId === session.id ? (
-                        <Check size={14} />
-                      ) : null}
-                      {disconnectedId === session.id ? 'Desconectado' : 'Desconectar'}
-                    </button>
+                    {isBusiness && (
+                      <div className="pt-3 border-t border-zinc-800">
+                        <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2">Playlist Padrão da TV</label>
+                        <select
+                          value={dojoSettings.tv_playlists?.[session.id] || ''}
+                          onChange={(e) => updateTvPlaylist(session.id, e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                        >
+                          <option value="">Nenhuma (Exibir Logo)</option>
+                          {(dojoSettings.playlists || []).map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -2370,17 +2395,26 @@ export default function App() {
         .filter((m): m is MediaItem => m !== undefined);
     }
     
-    if (activeSchedules.length === 0) return [];
-    // Get the first active schedule
-    const activeSchedule = activeSchedules[0];
-    const playlist = dojoSettings.playlists?.find(p => p.id === activeSchedule.playlist_id);
+    let playlistIdToPlay: string | undefined;
+
+    if (activeSchedules.length > 0) {
+      // Get the first active schedule
+      playlistIdToPlay = activeSchedules[0].playlist_id;
+    } else if (pairingCode && dojoSettings.tv_playlists?.[pairingCode]) {
+      // Fallback to TV's default playlist
+      playlistIdToPlay = dojoSettings.tv_playlists[pairingCode];
+    }
+
+    if (!playlistIdToPlay) return [];
+
+    const playlist = dojoSettings.playlists?.find(p => p.id === playlistIdToPlay);
     if (!playlist) return [];
     
     // Map media_ids to actual MediaItems
     return playlist.media_ids
       .map(id => mediaList.find(m => m.id === id))
       .filter((m): m is MediaItem => m !== undefined);
-  }, [activeSchedules, dojoSettings.playlists, mediaList, activeManualPlaylist]);
+  }, [activeSchedules, dojoSettings.playlists, dojoSettings.tv_playlists, mediaList, activeManualPlaylist, pairingCode]);
 
   const currentScheduledMedia = useMemo(() => {
     if (activePlaylistMedia.length === 0) return null;
@@ -2601,8 +2635,8 @@ export default function App() {
                           {!isFullscreenMedia && (
                             <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
                               <p className="text-lg font-black uppercase tracking-widest flex items-center gap-3">
-                                {activeMedia || activeManualPlaylist ? <PlayCircle className="text-blue-500" /> : <Calendar className="text-amber-500" />}
-                                {activeMedia ? 'AO VIVO' : activeManualPlaylist ? 'PLAYLIST' : 'PROGRAMADO'}
+                                {activeMedia || activeManualPlaylist ? <PlayCircle className="text-blue-500" /> : activeSchedules.length > 0 ? <Calendar className="text-amber-500" /> : <Tv className="text-purple-500" />}
+                                {activeMedia ? 'AO VIVO' : activeManualPlaylist ? 'PLAYLIST' : activeSchedules.length > 0 ? 'PROGRAMADO' : 'PLAYLIST DA TV'}
                               </p>
                             </div>
                           )}
