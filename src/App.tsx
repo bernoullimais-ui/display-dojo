@@ -55,6 +55,12 @@ interface DojoSettings {
   };
   playlists?: Playlist[];
   tv_playlists?: Record<string, string>;
+  sponsors_config?: {
+    timer_active: boolean;
+    scoreboard_active: boolean;
+    playlist_id: string;
+    interval: number;
+  };
   subscription_tier?: 'FREE' | 'STARTER' | 'PRO' | 'PREMIUM' | 'BUSINESS';
 }
 
@@ -96,6 +102,12 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
     text: '',
     active: false
   });
+  const [sponsorsConfig, setSponsorsConfig] = useState({
+    timer_active: false,
+    scoreboard_active: false,
+    playlist_id: '',
+    interval: 15
+  });
   const [localConfig, setLocalConfig] = useState({
     prepTime: 10,
     workTime: 20,
@@ -135,7 +147,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const isBusiness = ['BUSINESS'].includes(tier);
   const [newSchedule, setNewSchedule] = useState({
     playlist_id: '',
-    day_of_week: new Date().getDay(),
+    days_of_week: [new Date().getDay()],
     start_time: '08:00',
     end_time: '10:00'
   });
@@ -208,6 +220,9 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
         }
         if (mergedSettings.ticker_config) {
           setTickerConfig(prev => ({ ...prev, ...mergedSettings.ticker_config }));
+        }
+        if (mergedSettings.sponsors_config) {
+          setSponsorsConfig(prev => ({ ...prev, ...mergedSettings.sponsors_config }));
         }
       }
     };
@@ -338,6 +353,16 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
     
     if (supabase && teacherId) {
       await supabase.from('dojo_settings').update({ ticker_config: newConfig }).eq('teacher_id', teacherId);
+    }
+  };
+
+  const updateSponsorsConfig = async (field: keyof typeof sponsorsConfig, value: any) => {
+    const newConfig = { ...sponsorsConfig, [field]: value };
+    setSponsorsConfig(newConfig);
+    handleCommand('SPONSORS_UPDATE', newConfig);
+    
+    if (supabase && teacherId) {
+      await supabase.from('dojo_settings').update({ sponsors_config: newConfig }).eq('teacher_id', teacherId);
     }
   };
 
@@ -701,24 +726,25 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const addSchedule = async () => {
     if (!supabase) return;
     if (!newSchedule.playlist_id) return alert('Selecione uma playlist!');
+    if (newSchedule.days_of_week.length === 0) return alert('Selecione pelo menos um dia!');
     
-    const payload = {
+    const payloads = newSchedule.days_of_week.map(day => ({
       teacher_id: teacherId,
       playlist_id: newSchedule.playlist_id,
-      day_of_week: newSchedule.day_of_week,
+      day_of_week: day,
       start_time: newSchedule.start_time,
       end_time: newSchedule.end_time
-    };
+    }));
 
     const { data, error } = await supabase
       .from('schedules')
-      .insert([payload])
+      .insert(payloads)
       .select('*');
 
     if (data) {
       setSchedules([...schedules, ...data]);
       setShowAddSchedule(false);
-      setNewSchedule(prev => ({ ...prev, playlist_id: '' }));
+      setNewSchedule(prev => ({ ...prev, playlist_id: '', days_of_week: [new Date().getDay()] }));
     }
     if (error) console.error(error);
   };
@@ -1611,13 +1637,20 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Dia da Semana</label>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Dias da Semana</label>
                   <div className="grid grid-cols-7 gap-1">
                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, i) => (
                       <button
                         key={i}
-                        onClick={() => setNewSchedule({...newSchedule, day_of_week: i})}
-                        className={`py-2 rounded-lg text-xs font-bold transition-all ${newSchedule.day_of_week === i ? 'bg-blue-600 text-white' : 'bg-black text-zinc-500 border border-zinc-800'}`}
+                        onClick={() => {
+                          const days = newSchedule.days_of_week || [];
+                          if (days.includes(i)) {
+                            setNewSchedule({...newSchedule, days_of_week: days.filter(d => d !== i)});
+                          } else {
+                            setNewSchedule({...newSchedule, days_of_week: [...days, i]});
+                          }
+                        }}
+                        className={`py-2 rounded-lg text-xs font-bold transition-all ${(newSchedule.days_of_week || []).includes(i) ? 'bg-blue-600 text-white' : 'bg-black text-zinc-500 border border-zinc-800'}`}
                       >
                         {day}
                       </button>
@@ -1977,6 +2010,72 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                   </div>
                 )}
               </div>
+
+              <div className="space-y-4 pt-6 border-t border-zinc-800">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase">Patrocinadores (Treino e Placar)</label>
+                {!isStarter ? (
+                  <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-6 rounded-3xl text-center space-y-3 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                      <Crown size={80} />
+                    </div>
+                    <div className="w-12 h-12 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Lock className="text-blue-500" size={24} />
+                    </div>
+                    <h3 className="font-bold text-white">Recurso STARTER</h3>
+                    <p className="text-zinc-400 text-xs max-w-[200px] mx-auto">
+                      Ative espaços de patrocinadores a partir do Plano STARTER.
+                    </p>
+                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-blue-700 transition-colors">
+                      Fazer Upgrade
+                    </a>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-black p-4 rounded-xl border border-zinc-800">
+                      <span className="text-sm font-bold">Ativar no Treino</span>
+                      <button 
+                        onClick={() => updateSponsorsConfig('timer_active', !sponsorsConfig.timer_active)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${sponsorsConfig.timer_active ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${sponsorsConfig.timer_active ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-black p-4 rounded-xl border border-zinc-800">
+                      <span className="text-sm font-bold">Ativar no Placar</span>
+                      <button 
+                        onClick={() => updateSponsorsConfig('scoreboard_active', !sponsorsConfig.scoreboard_active)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${sponsorsConfig.scoreboard_active ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${sponsorsConfig.scoreboard_active ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Playlist de Patrocinadores</label>
+                      <select
+                        value={sponsorsConfig.playlist_id}
+                        onChange={(e) => updateSponsorsConfig('playlist_id', e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+                      >
+                        <option value="">Selecione uma playlist...</option>
+                        {(dojoSettings.playlists || []).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Tempo de Transição (segundos)</label>
+                      <input 
+                        type="number" 
+                        min="5"
+                        max="300"
+                        value={sponsorsConfig.interval}
+                        onChange={(e) => updateSponsorsConfig('interval', parseInt(e.target.value))}
+                        className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
@@ -2158,6 +2257,12 @@ export default function App() {
     text: '',
     active: false
   });
+  const [sponsorsConfig, setSponsorsConfig] = useState({
+    timer_active: false,
+    scoreboard_active: false,
+    playlist_id: '',
+    interval: 15
+  });
   const [isFullscreenMedia, setIsFullscreenMedia] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
@@ -2234,7 +2339,15 @@ export default function App() {
           ...(settingsData?.timer_config || {})
         }
       };
-      if (mergedSettings) setDojoSettings(mergedSettings);
+      if (mergedSettings) {
+        setDojoSettings(mergedSettings);
+        if (mergedSettings.ticker_config) {
+          setTickerConfig(prev => ({ ...prev, ...mergedSettings.ticker_config }));
+        }
+        if (mergedSettings.sponsors_config) {
+          setSponsorsConfig(prev => ({ ...prev, ...mergedSettings.sponsors_config }));
+        }
+      }
 
       const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
       if (mediaData) setMediaList(mediaData);
@@ -2327,6 +2440,9 @@ export default function App() {
         if (cmd.type === 'TICKER_UPDATE') {
           setTickerConfig(cmd.payload);
         }
+        if (cmd.type === 'SPONSORS_UPDATE') {
+          setSponsorsConfig(cmd.payload);
+        }
       }
     };
 
@@ -2387,6 +2503,16 @@ export default function App() {
              currentTimeStr <= end;
     });
   }, [schedules, isTimerActive, activeMedia, activeManualPlaylist, currentClock]);
+
+  const userSponsors = useMemo(() => {
+    if (!sponsorsConfig.playlist_id) return [];
+    const playlist = dojoSettings.playlists?.find(p => p.id === sponsorsConfig.playlist_id);
+    if (!playlist) return [];
+    return playlist.media_ids
+      .map(id => mediaList.find(m => m.id === id))
+      .filter((m): m is MediaItem => m !== undefined)
+      .map(m => ({ url: m.url, type: m.type }));
+  }, [sponsorsConfig.playlist_id, dojoSettings.playlists, mediaList]);
 
   const activePlaylistMedia = useMemo(() => {
     if (activeManualPlaylist) {
@@ -2605,9 +2731,9 @@ export default function App() {
                         blueName={scoreboardConfig.blueName}
                         whiteName={scoreboardConfig.whiteName}
                         category={scoreboardConfig.category}
-                        isFreePlan={!dojoSettings.subscription_tier || dojoSettings.subscription_tier === 'FREE'}
-                        globalSponsors={dojoSettings.scoreboard_config?.free_sponsors || []}
-                        globalSponsorInterval={dojoSettings.scoreboard_config?.free_sponsor_interval || 15}
+                        isFreePlan={!isStarter || sponsorsConfig.scoreboard_active}
+                        globalSponsors={isStarter && sponsorsConfig.scoreboard_active ? userSponsors : (dojoSettings.scoreboard_config?.free_sponsors || [])}
+                        globalSponsorInterval={isStarter && sponsorsConfig.scoreboard_active ? sponsorsConfig.interval : (dojoSettings.scoreboard_config?.free_sponsor_interval || 15)}
                       />
                     </div>
                   ) : isTimerActive ? (
@@ -2617,9 +2743,9 @@ export default function App() {
                         isMuted={isMuted} 
                         volume={volume} 
                         initialConfig={dojoSettings.timer_config}
-                        isFreePlan={!dojoSettings.subscription_tier || dojoSettings.subscription_tier === 'FREE'}
-                        globalSponsors={dojoSettings.timer_config?.free_sponsors || []}
-                        globalSponsorInterval={dojoSettings.timer_config?.free_sponsor_interval || 15}
+                        isFreePlan={!isStarter || sponsorsConfig.timer_active}
+                        globalSponsors={isStarter && sponsorsConfig.timer_active ? userSponsors : (dojoSettings.timer_config?.free_sponsors || [])}
+                        globalSponsorInterval={isStarter && sponsorsConfig.timer_active ? sponsorsConfig.interval : (dojoSettings.timer_config?.free_sponsor_interval || 15)}
                       />
                       {activeMedia && (
                         <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-3xl border border-zinc-800'}`}>
@@ -2664,8 +2790,8 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="fixed bottom-0 left-0 w-full p-8 flex justify-center opacity-10 pointer-events-none">
-                  <span className="text-9xl font-black tracking-tighter select-none uppercase">{dojoSettings.name}</span>
+                <div className={`fixed bottom-0 left-0 w-full p-8 flex justify-center opacity-10 pointer-events-none ${((isScoreboardActive && (!isStarter || sponsorsConfig.scoreboard_active)) || (isTimerActive && (!isStarter || sponsorsConfig.timer_active))) ? 'px-[15vw]' : ''}`}>
+                  <span className="text-9xl font-black tracking-tighter select-none uppercase text-center truncate">{dojoSettings.name}</span>
                 </div>
               </>
             )}
