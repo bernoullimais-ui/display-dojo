@@ -44,13 +44,11 @@ interface Playlist {
 interface DojoSettings {
   name: string;
   logo_url: string | null;
+  city?: string;
+  state?: string;
   timer_config?: any;
   presets?: TimerPreset[];
-  scoreboard_config?: {
-    blueName: string;
-    whiteName: string;
-    category: string;
-  };
+  scoreboard_config?: any;
   ticker_config?: {
     text: string;
     active: boolean;
@@ -118,6 +116,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
+  const [dojoForm, setDojoForm] = useState({ name: '', city: '', state: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showPresetManager, setShowPresetManager] = useState(false);
@@ -195,6 +194,11 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
 
       if (mergedSettings) {
         setDojoSettings(mergedSettings);
+        setDojoForm({
+          name: mergedSettings.name || '',
+          city: mergedSettings.timer_config?.city || '',
+          state: mergedSettings.timer_config?.state || ''
+        });
         if (mergedSettings.timer_config) {
           setLocalConfig(prev => ({ ...prev, ...mergedSettings.timer_config }));
         }
@@ -578,19 +582,33 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
     }
   };
 
-  const saveDojoName = async (name: string) => {
+  const saveDojoConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!supabase) return;
+    
+    if (!dojoForm.name || !dojoForm.city || !dojoForm.state) {
+      alert('Por favor, preencha o Nome do Dojo, Cidade e Estado.');
+      return;
+    }
+
+    const newConfig = { ...localConfig, city: dojoForm.city, state: dojoForm.state };
+    setLocalConfig(newConfig);
+
     const { error } = await supabase
       .from('dojo_settings')
       .upsert({
         teacher_id: teacherId,
-        name: name,
+        name: dojoForm.name,
+        timer_config: newConfig,
         updated_at: new Date().toISOString()
       });
     
     if (!error) {
-      setDojoSettings(prev => ({ ...prev, name }));
-      handleCommand('SETTINGS_UPDATE', { ...dojoSettings, name });
+      setDojoSettings(prev => ({ ...prev, name: dojoForm.name, timer_config: newConfig }));
+      handleCommand('SETTINGS_UPDATE', { ...dojoSettings, name: dojoForm.name, timer_config: newConfig });
+      alert('Configurações do Dojo salvas com sucesso!');
+    } else {
+      alert('Erro ao salvar configurações.');
     }
   };
 
@@ -1833,18 +1851,51 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-6">
               <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] text-center">Configuração do Dojo</h3>
               
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase">Nome do Dojo</label>
-                <input 
-                  type="text" 
-                  defaultValue={dojoSettings.name}
-                  onBlur={(e) => saveDojoName(e.target.value)}
-                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  placeholder="Ex: Dojo Central"
-                />
-              </div>
+              <form onSubmit={saveDojoConfig} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Nome do Dojo *</label>
+                  <input 
+                    type="text" 
+                    value={dojoForm.name}
+                    onChange={(e) => setDojoForm({...dojoForm, name: e.target.value})}
+                    className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+                    placeholder="Ex: Dojo Central"
+                    required
+                  />
+                </div>
 
-              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Cidade *</label>
+                    <input 
+                      type="text" 
+                      value={dojoForm.city}
+                      onChange={(e) => setDojoForm({...dojoForm, city: e.target.value})}
+                      className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+                      placeholder="Ex: São Paulo"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Estado (UF) *</label>
+                    <input 
+                      type="text" 
+                      value={dojoForm.state}
+                      onChange={(e) => setDojoForm({...dojoForm, state: e.target.value})}
+                      className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+                      placeholder="Ex: SP"
+                      maxLength={2}
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors">
+                  Salvar Configurações do Dojo
+                </button>
+              </form>
+
+              <div className="space-y-2 pt-6 border-t border-zinc-800">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase">Tempo da Logo Inicial (segundos)</label>
                 <p className="text-xs text-zinc-600">Tempo que a logo do Dojo aparece ao abrir a TV.</p>
                 <input 
@@ -2521,10 +2572,8 @@ export default function App() {
                         whiteName={scoreboardConfig.whiteName}
                         category={scoreboardConfig.category}
                         isFreePlan={!dojoSettings.subscription_tier || dojoSettings.subscription_tier === 'FREE'}
-                        globalSponsor={{
-                          url: dojoSettings.scoreboard_config?.free_sponsor_url,
-                          type: dojoSettings.scoreboard_config?.free_sponsor_type
-                        }}
+                        globalSponsors={dojoSettings.scoreboard_config?.free_sponsors || []}
+                        globalSponsorInterval={dojoSettings.scoreboard_config?.free_sponsor_interval || 15}
                       />
                     </div>
                   ) : isTimerActive ? (
@@ -2535,10 +2584,8 @@ export default function App() {
                         volume={volume} 
                         initialConfig={dojoSettings.timer_config}
                         isFreePlan={!dojoSettings.subscription_tier || dojoSettings.subscription_tier === 'FREE'}
-                        globalSponsor={{
-                          url: dojoSettings.timer_config?.free_sponsor_url,
-                          type: dojoSettings.timer_config?.free_sponsor_type
-                        }}
+                        globalSponsors={dojoSettings.timer_config?.free_sponsors || []}
+                        globalSponsorInterval={dojoSettings.timer_config?.free_sponsor_interval || 15}
                       />
                       {activeMedia && (
                         <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-3xl border border-zinc-800'}`}>

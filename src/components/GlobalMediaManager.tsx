@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Plus, Upload, Trash2, Video, Youtube, PlayCircle, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Plus, Upload, Trash2, Video, Youtube, PlayCircle, Image as ImageIcon, X } from 'lucide-react';
 
 interface MediaItem {
   id: string;
@@ -16,10 +16,10 @@ export default function GlobalMediaManager() {
   const [loading, setLoading] = useState(true);
   const [dojoName, setDojoName] = useState('');
   const [dojoLogo, setDojoLogo] = useState('');
-  const [scoreboardSponsorUrl, setScoreboardSponsorUrl] = useState('');
-  const [scoreboardSponsorType, setScoreboardSponsorType] = useState<'image' | 'video'>('image');
-  const [timerSponsorUrl, setTimerSponsorUrl] = useState('');
-  const [timerSponsorType, setTimerSponsorType] = useState<'image' | 'video'>('image');
+  const [scoreboardSponsors, setScoreboardSponsors] = useState<{url: string, type: 'image' | 'video'}[]>([]);
+  const [scoreboardSponsorInterval, setScoreboardSponsorInterval] = useState(15);
+  const [timerSponsors, setTimerSponsors] = useState<{url: string, type: 'image' | 'video'}[]>([]);
+  const [timerSponsorInterval, setTimerSponsorInterval] = useState(15);
   const [isUploading, setIsUploading] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [mediaUrlInput, setMediaUrlInput] = useState('');
@@ -56,12 +56,12 @@ export default function GlobalMediaManager() {
       setDojoName(settingsData.name || '');
       setDojoLogo(settingsData.logo_url || '');
       if (settingsData.scoreboard_config) {
-        setScoreboardSponsorUrl(settingsData.scoreboard_config.free_sponsor_url || '');
-        setScoreboardSponsorType(settingsData.scoreboard_config.free_sponsor_type || 'image');
+        setScoreboardSponsors(settingsData.scoreboard_config.free_sponsors || (settingsData.scoreboard_config.free_sponsor_url ? [{url: settingsData.scoreboard_config.free_sponsor_url, type: settingsData.scoreboard_config.free_sponsor_type || 'image'}] : []));
+        setScoreboardSponsorInterval(settingsData.scoreboard_config.free_sponsor_interval || 15);
       }
       if (settingsData.timer_config) {
-        setTimerSponsorUrl(settingsData.timer_config.free_sponsor_url || '');
-        setTimerSponsorType(settingsData.timer_config.free_sponsor_type || 'image');
+        setTimerSponsors(settingsData.timer_config.free_sponsors || (settingsData.timer_config.free_sponsor_url ? [{url: settingsData.timer_config.free_sponsor_url, type: settingsData.timer_config.free_sponsor_type || 'image'}] : []));
+        setTimerSponsorInterval(settingsData.timer_config.free_sponsor_interval || 15);
       }
     }
 
@@ -80,14 +80,14 @@ export default function GlobalMediaManager() {
 
     const newScoreboardConfig = {
       ...(existing?.scoreboard_config || {}),
-      free_sponsor_url: scoreboardSponsorUrl,
-      free_sponsor_type: scoreboardSponsorType
+      free_sponsors: scoreboardSponsors,
+      free_sponsor_interval: scoreboardSponsorInterval
     };
 
     const newTimerConfig = {
       ...(existing?.timer_config || {}),
-      free_sponsor_url: timerSponsorUrl,
-      free_sponsor_type: timerSponsorType
+      free_sponsors: timerSponsors,
+      free_sponsor_interval: timerSponsorInterval
     };
 
     await supabase
@@ -101,6 +101,50 @@ export default function GlobalMediaManager() {
         updated_at: new Date().toISOString()
       });
     alert('Configurações globais salvas com sucesso!');
+  };
+
+  const removeScoreboardSponsor = async (index: number) => {
+    if (!supabase) return;
+    const newSponsors = [...scoreboardSponsors];
+    newSponsors.splice(index, 1);
+    setScoreboardSponsors(newSponsors);
+    
+    const { data: existing } = await supabase.from('dojo_settings').select('scoreboard_config').eq('teacher_id', '00000000-0000-0000-0000-000000000000').single();
+    const newScoreboardConfig = {
+      ...(existing?.scoreboard_config || {}),
+      free_sponsors: newSponsors,
+      free_sponsor_interval: scoreboardSponsorInterval
+    };
+    
+    await supabase
+      .from('dojo_settings')
+      .upsert({
+        teacher_id: '00000000-0000-0000-0000-000000000000',
+        scoreboard_config: newScoreboardConfig,
+        updated_at: new Date().toISOString()
+      });
+  };
+
+  const removeTimerSponsor = async (index: number) => {
+    if (!supabase) return;
+    const newSponsors = [...timerSponsors];
+    newSponsors.splice(index, 1);
+    setTimerSponsors(newSponsors);
+    
+    const { data: existing } = await supabase.from('dojo_settings').select('timer_config').eq('teacher_id', '00000000-0000-0000-0000-000000000000').single();
+    const newTimerConfig = {
+      ...(existing?.timer_config || {}),
+      free_sponsors: newSponsors,
+      free_sponsor_interval: timerSponsorInterval
+    };
+    
+    await supabase
+      .from('dojo_settings')
+      .upsert({
+        teacher_id: '00000000-0000-0000-0000-000000000000',
+        timer_config: newTimerConfig,
+        updated_at: new Date().toISOString()
+      });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, mode: 'LOGO' | 'SPONSOR' | 'TIMER_SPONSOR' | 'MEDIA' = 'MEDIA') => {
@@ -134,14 +178,14 @@ export default function GlobalMediaManager() {
           });
       } else if (mode === 'SPONSOR') {
         const type = file.type.startsWith('video') ? 'video' : 'image';
-        setScoreboardSponsorUrl(publicUrl);
-        setScoreboardSponsorType(type);
+        const newSponsors = [...scoreboardSponsors, { url: publicUrl, type: type as 'image' | 'video' }];
+        setScoreboardSponsors(newSponsors);
         
         const { data: existing } = await supabase.from('dojo_settings').select('scoreboard_config').eq('teacher_id', '00000000-0000-0000-0000-000000000000').single();
         const newScoreboardConfig = {
           ...(existing?.scoreboard_config || {}),
-          free_sponsor_url: publicUrl,
-          free_sponsor_type: type
+          free_sponsors: newSponsors,
+          free_sponsor_interval: scoreboardSponsorInterval
         };
         
         await supabase
@@ -153,14 +197,14 @@ export default function GlobalMediaManager() {
           });
       } else if (mode === 'TIMER_SPONSOR') {
         const type = file.type.startsWith('video') ? 'video' : 'image';
-        setTimerSponsorUrl(publicUrl);
-        setTimerSponsorType(type);
+        const newSponsors = [...timerSponsors, { url: publicUrl, type: type as 'image' | 'video' }];
+        setTimerSponsors(newSponsors);
         
         const { data: existing } = await supabase.from('dojo_settings').select('timer_config').eq('teacher_id', '00000000-0000-0000-0000-000000000000').single();
         const newTimerConfig = {
           ...(existing?.timer_config || {}),
-          free_sponsor_url: publicUrl,
-          free_sponsor_type: type
+          free_sponsors: newSponsors,
+          free_sponsor_interval: timerSponsorInterval
         };
         
         await supabase
@@ -337,47 +381,50 @@ export default function GlobalMediaManager() {
               <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 block">Patrocínio do Placar (Versão FREE)</label>
               <p className="text-xs text-zinc-600 mb-4">Exibido no rodapé do placar. Proporção recomendada: 16:9 ou super largo (ex: 1920x200px).</p>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="w-64 h-24 bg-black border border-zinc-800 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
-                {scoreboardSponsorUrl ? (
-                  scoreboardSponsorType === 'video' ? (
-                    <video src={scoreboardSponsorUrl} className="w-full h-full object-contain" muted loop autoPlay />
+            
+            <div className="flex items-center gap-4 mb-4">
+              <label className="text-xs font-bold text-zinc-500 uppercase">Tempo de Transição (segundos):</label>
+              <input 
+                type="number" 
+                value={scoreboardSponsorInterval}
+                onChange={(e) => setScoreboardSponsorInterval(parseInt(e.target.value) || 15)}
+                onBlur={saveGlobalSettings}
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1 text-sm w-20 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {scoreboardSponsors.map((sponsor, index) => (
+                <div key={index} className="relative group bg-black border border-zinc-800 rounded-2xl overflow-hidden h-24">
+                  {sponsor.type === 'video' ? (
+                    <video src={sponsor.url} className="w-full h-full object-contain" muted loop autoPlay />
                   ) : (
-                    <img src={scoreboardSponsorUrl} alt="Sponsor" className="w-full h-full object-contain p-2" />
-                  )
-                ) : (
-                  <ImageIcon className="text-zinc-700" size={32} />
-                )}
-              </div>
-              <div className="flex flex-col gap-3">
-                <input 
-                  type="file" 
-                  ref={sponsorInputRef} 
-                  onChange={(e) => handleFileUpload(e, 'SPONSOR')} 
-                  className="hidden" 
-                  accept="image/*,video/*" 
-                />
-                <button 
-                  onClick={() => sponsorInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-6 rounded-xl transition-colors flex items-center gap-2"
-                >
-                  {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
-                  Alterar Patrocínio
-                </button>
-                {scoreboardSponsorUrl && (
+                    <img src={sponsor.url} alt="Sponsor" className="w-full h-full object-contain p-2" />
+                  )}
                   <button 
-                    onClick={() => {
-                      setScoreboardSponsorUrl('');
-                      saveGlobalSettings();
-                    }}
-                    className="text-red-500 text-sm font-bold hover:text-red-400 transition-colors text-left"
+                    onClick={() => removeScoreboardSponsor(index)}
+                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    Remover Patrocínio
+                    <X size={14} />
                   </button>
-                )}
+                </div>
+              ))}
+              
+              <div className="flex items-center justify-center h-24 border-2 border-dashed border-zinc-800 rounded-2xl hover:border-zinc-600 transition-colors cursor-pointer" onClick={() => sponsorInputRef.current?.click()}>
+                <div className="flex flex-col items-center gap-2 text-zinc-500">
+                  {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+                  <span className="text-xs font-bold uppercase">Adicionar</span>
+                </div>
               </div>
             </div>
+            
+            <input 
+              type="file" 
+              ref={sponsorInputRef} 
+              onChange={(e) => handleFileUpload(e, 'SPONSOR')} 
+              className="hidden" 
+              accept="image/*,video/*" 
+            />
           </div>
 
           <div className="space-y-4">
@@ -385,47 +432,50 @@ export default function GlobalMediaManager() {
               <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 block">Patrocínio do Cronômetro (Versão FREE)</label>
               <p className="text-xs text-zinc-600 mb-4">Exibido nas laterais do cronômetro. Proporção recomendada: 9:16 (Vertical, ex: 1080x1920px).</p>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="w-24 h-40 bg-black border border-zinc-800 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
-                {timerSponsorUrl ? (
-                  timerSponsorType === 'video' ? (
-                    <video src={timerSponsorUrl} className="w-full h-full object-contain" muted loop autoPlay />
+            
+            <div className="flex items-center gap-4 mb-4">
+              <label className="text-xs font-bold text-zinc-500 uppercase">Tempo de Transição (segundos):</label>
+              <input 
+                type="number" 
+                value={timerSponsorInterval}
+                onChange={(e) => setTimerSponsorInterval(parseInt(e.target.value) || 15)}
+                onBlur={saveGlobalSettings}
+                className="bg-black border border-zinc-800 rounded-lg px-3 py-1 text-sm w-20 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              {timerSponsors.map((sponsor, index) => (
+                <div key={index} className="relative group bg-black border border-zinc-800 rounded-2xl overflow-hidden h-32">
+                  {sponsor.type === 'video' ? (
+                    <video src={sponsor.url} className="w-full h-full object-contain" muted loop autoPlay />
                   ) : (
-                    <img src={timerSponsorUrl} alt="Timer Sponsor" className="w-full h-full object-contain p-2" />
-                  )
-                ) : (
-                  <ImageIcon className="text-zinc-700" size={32} />
-                )}
-              </div>
-              <div className="flex flex-col gap-3">
-                <input 
-                  type="file" 
-                  ref={timerSponsorInputRef} 
-                  onChange={(e) => handleFileUpload(e, 'TIMER_SPONSOR')} 
-                  className="hidden" 
-                  accept="image/*,video/*" 
-                />
-                <button 
-                  onClick={() => timerSponsorInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-6 rounded-xl transition-colors flex items-center gap-2"
-                >
-                  {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
-                  Alterar Patrocínio
-                </button>
-                {timerSponsorUrl && (
+                    <img src={sponsor.url} alt="Sponsor" className="w-full h-full object-contain p-2" />
+                  )}
                   <button 
-                    onClick={() => {
-                      setTimerSponsorUrl('');
-                      saveGlobalSettings();
-                    }}
-                    className="text-red-500 text-sm font-bold hover:text-red-400 transition-colors text-left"
+                    onClick={() => removeTimerSponsor(index)}
+                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    Remover Patrocínio
+                    <X size={14} />
                   </button>
-                )}
+                </div>
+              ))}
+              
+              <div className="flex items-center justify-center h-32 border-2 border-dashed border-zinc-800 rounded-2xl hover:border-zinc-600 transition-colors cursor-pointer" onClick={() => timerSponsorInputRef.current?.click()}>
+                <div className="flex flex-col items-center gap-2 text-zinc-500">
+                  {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+                  <span className="text-xs font-bold uppercase">Adicionar</span>
+                </div>
               </div>
             </div>
+
+            <input 
+              type="file" 
+              ref={timerSponsorInputRef} 
+              onChange={(e) => handleFileUpload(e, 'TIMER_SPONSOR')} 
+              className="hidden" 
+              accept="image/*,video/*" 
+            />
           </div>
         </div>
       </div>

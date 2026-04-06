@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ScoreboardProps {
   externalCommand: { type: string; payload?: any } | null;
@@ -7,10 +7,11 @@ interface ScoreboardProps {
   whiteName?: string;
   category?: string;
   isFreePlan?: boolean;
-  globalSponsor?: {
+  globalSponsors?: {
     url?: string;
     type?: 'image' | 'video';
-  };
+  }[];
+  globalSponsorInterval?: number;
 }
 
 const ScoreNumber = ({ value }: { value: number }) => (
@@ -31,7 +32,8 @@ export default function Scoreboard({
   whiteName,
   category = '',
   isFreePlan,
-  globalSponsor
+  globalSponsors = [],
+  globalSponsorInterval = 15
 }: ScoreboardProps) {
   const displayBlueName = blueName || 'AZUL';
   const displayWhiteName = whiteName || 'BRANCO';
@@ -44,6 +46,19 @@ export default function Scoreboard({
   const [whiteScore, setWhiteScore] = useState({ wazaari: 0, ippon: 0, yuko: 0, shido: 0 });
 
   const [winner, setWinner] = useState<'blue' | 'white' | null>(null);
+  const [sponsorIndex, setSponsorIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isFreePlan || globalSponsors.length <= 1) return;
+    
+    const interval = setInterval(() => {
+      setSponsorIndex(prev => (prev + 1) % globalSponsors.length);
+    }, globalSponsorInterval * 1000);
+    
+    return () => clearInterval(interval);
+  }, [isFreePlan, globalSponsors.length, globalSponsorInterval]);
+
+  const currentSponsor = globalSponsors.length > 0 ? globalSponsors[sponsorIndex % globalSponsors.length] : undefined;
   const [isGoldenScore, setIsGoldenScore] = useState(false);
   const [goldenScoreTime, setGoldenScoreTime] = useState(0);
 
@@ -271,19 +286,30 @@ export default function Scoreboard({
       </div>
 
       {/* Main Score Area */}
-      <div className={`flex-1 flex pt-[20vh] ${isFreePlan && globalSponsor?.url ? 'pb-[15vh]' : ''}`}>
+      <div className={`flex-1 flex pt-[20vh] ${isFreePlan && currentSponsor?.url ? 'pb-[15vh]' : ''}`}>
         {renderScore(blueScore, true)}
         {renderScore(whiteScore, false)}
       </div>
 
       {/* Free Plan Sponsor Footer */}
-      {isFreePlan && globalSponsor?.url && (
+      {isFreePlan && currentSponsor?.url && (
         <div className="absolute bottom-0 left-0 right-0 h-[15vh] bg-black border-t border-zinc-800 flex items-center justify-center overflow-hidden z-20">
-          {globalSponsor.type === 'video' ? (
-            <video src={globalSponsor.url} autoPlay loop muted className="w-full h-full object-contain" />
-          ) : (
-            <img src={globalSponsor.url} className="w-full h-full object-contain" />
-          )}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSponsor.url}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-full"
+            >
+              {currentSponsor.type === 'video' ? (
+                <video src={currentSponsor.url} autoPlay loop muted className="w-full h-full object-contain" />
+              ) : (
+                <img src={currentSponsor.url} className="w-full h-full object-contain" />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       )}
 
@@ -292,7 +318,7 @@ export default function Scoreboard({
         <motion.div 
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className={`absolute ${isFreePlan && globalSponsor?.url ? 'bottom-[20vh]' : 'bottom-[5vh]'} left-1/2 -translate-x-1/2 px-[4vw] py-[2vh] rounded-full shadow-2xl flex items-center gap-[2vw] border-4 z-30
+          className={`absolute ${isFreePlan && currentSponsor?.url ? 'bottom-[20vh]' : 'bottom-[5vh]'} left-1/2 -translate-x-1/2 px-[4vw] py-[2vh] rounded-full shadow-2xl flex items-center gap-[2vw] border-4 z-30
             ${osaekomiActive === 'blue' ? 'bg-blue-600 border-white text-white' : 'bg-white border-black text-black'}`}
         >
           <span className="text-[4vmin] font-black uppercase tracking-widest">Osaekomi</span>

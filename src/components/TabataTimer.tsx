@@ -28,10 +28,11 @@ interface TabataTimerProps {
   volume?: number;
   initialConfig?: TabataConfig;
   isFreePlan?: boolean;
-  globalSponsor?: {
+  globalSponsors?: {
     url?: string;
     type?: 'image' | 'video';
-  };
+  }[];
+  globalSponsorInterval?: number;
 }
 
 const DEFAULT_CONFIG: TabataConfig = {
@@ -41,7 +42,7 @@ const DEFAULT_CONFIG: TabataConfig = {
   cycles: 8,
 };
 
-export default function TabataTimer({ externalCommand, isMuted = true, volume = 50, initialConfig, isFreePlan, globalSponsor }: TabataTimerProps) {
+export default function TabataTimer({ externalCommand, isMuted = true, volume = 50, initialConfig, isFreePlan, globalSponsors = [], globalSponsorInterval = 15 }: TabataTimerProps) {
   const [config, setConfig] = useState<TabataConfig>(initialConfig || DEFAULT_CONFIG);
   const [phase, setPhase] = useState<Phase>('PREP');
   const [currentCycle, setCurrentCycle] = useState(1);
@@ -49,6 +50,19 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   const [isActive, setIsActive] = useState(false);
   const [ttsAudios, setTtsAudios] = useState<Record<string, string>>({});
   const [ttsFailed, setTtsFailed] = useState<Record<string, boolean>>({});
+  const [sponsorIndex, setSponsorIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isFreePlan || globalSponsors.length <= 1) return;
+    
+    const interval = setInterval(() => {
+      setSponsorIndex(prev => (prev + 1) % globalSponsors.length);
+    }, globalSponsorInterval * 1000);
+    
+    return () => clearInterval(interval);
+  }, [isFreePlan, globalSponsors.length, globalSponsorInterval]);
+
+  const currentSponsor = globalSponsors.length > 0 ? globalSponsors[sponsorIndex % globalSponsors.length] : undefined;
 
   // Helper to add WAV header to raw PCM data
   const createWavUrl = useCallback((pcmData: Uint8Array, sampleRate: number) => {
@@ -353,13 +367,24 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   return (
     <div className="w-full h-full flex relative">
       {/* Left Sponsor */}
-      {isFreePlan && globalSponsor?.url && (
+      {isFreePlan && currentSponsor?.url && (
         <div className="w-[15vw] h-full bg-black border-r border-zinc-800 flex items-center justify-center overflow-hidden z-20 shrink-0">
-          {globalSponsor.type === 'video' ? (
-            <video src={globalSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
-          ) : (
-            <img src={globalSponsor.url} className="w-full h-full object-cover" />
-          )}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSponsor.url}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-full"
+            >
+              {currentSponsor.type === 'video' ? (
+                <video src={currentSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
+              ) : (
+                <img src={currentSponsor.url} className="w-full h-full object-cover" />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       )}
 
@@ -446,13 +471,24 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
       </div>
 
       {/* Right Sponsor */}
-      {isFreePlan && globalSponsor?.url && (
+      {isFreePlan && currentSponsor?.url && (
         <div className="w-[15vw] h-full bg-black border-l border-zinc-800 flex items-center justify-center overflow-hidden z-20 shrink-0">
-          {globalSponsor.type === 'video' ? (
-            <video src={globalSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
-          ) : (
-            <img src={globalSponsor.url} className="w-full h-full object-cover" />
-          )}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSponsor.url}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-full"
+            >
+              {currentSponsor.type === 'video' ? (
+                <video src={currentSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
+              ) : (
+                <img src={currentSponsor.url} className="w-full h-full object-cover" />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       )}
     </div>
