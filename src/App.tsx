@@ -143,7 +143,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const [showVolumePopup, setShowVolumePopup] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
-  const tier = dojoSettings.subscription_tier || 'FREE';
+  const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
   const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
   const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
   const isBusiness = ['BUSINESS'].includes(tier);
