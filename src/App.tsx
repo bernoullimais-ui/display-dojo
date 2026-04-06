@@ -877,12 +877,12 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center">
-      <div className="w-full p-6 flex justify-between items-center border-b border-zinc-900">
-        <div className="flex items-center gap-2">
+      <div className="w-full p-4 flex flex-col items-center border-b border-zinc-900 gap-4">
+        <div className="flex items-center justify-center gap-2 w-full">
           <SmartphoneIcon size={20} className="text-blue-500" />
-          <span className="font-bold tracking-tighter">DOJO REMOTE ({dojoSettings.name})</span>
+          <span className="font-bold tracking-tighter text-center">DOJO REMOTE ({dojoSettings.name})</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-3 flex-wrap w-full">
           <div className="relative">
             <button 
               onClick={() => setShowVolumePopup(!showVolumePopup)}
@@ -920,22 +920,20 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
               </>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowTvManager(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
-              <Tv size={16} /> TVs
-            </button>
-            <button onClick={() => setShowAddTv(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
-              <PlusCircle size={16} /> Incluir TV
-            </button>
-            <button onClick={async () => {
-              if (supabase) {
-                await supabase.auth.signOut();
-                window.location.href = '/';
-              }
-            }} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-red-500">
-              <LogOut size={16} /> Sair
-            </button>
-          </div>
+          <button onClick={() => setShowTvManager(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
+            <Tv size={16} /> TVs
+          </button>
+          <button onClick={() => setShowAddTv(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
+            <PlusCircle size={16} /> Incluir TV
+          </button>
+          <button onClick={async () => {
+            if (supabase) {
+              await supabase.auth.signOut();
+              window.location.href = '/';
+            }
+          }} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-red-500">
+            <LogOut size={16} /> Sair
+          </button>
         </div>
       </div>
 
