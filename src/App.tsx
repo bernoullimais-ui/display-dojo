@@ -58,7 +58,8 @@ interface DojoSettings {
   sponsors_config?: {
     timer_active: boolean;
     scoreboard_active: boolean;
-    playlist_id: string;
+    timer_playlist_id: string;
+    scoreboard_playlist_id: string;
     interval: number;
   };
   subscription_tier?: 'FREE' | 'STARTER' | 'PRO' | 'PREMIUM' | 'BUSINESS';
@@ -105,7 +106,8 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
   const [sponsorsConfig, setSponsorsConfig] = useState({
     timer_active: false,
     scoreboard_active: false,
-    playlist_id: '',
+    timer_playlist_id: '',
+    scoreboard_playlist_id: '',
     interval: 15
   });
   const [localConfig, setLocalConfig] = useState({
@@ -2050,10 +2052,23 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                       </button>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Playlist de Patrocinadores</label>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Playlist de Patrocinadores (Treino)</label>
                       <select
-                        value={sponsorsConfig.playlist_id}
-                        onChange={(e) => updateSponsorsConfig('playlist_id', e.target.value)}
+                        value={sponsorsConfig.timer_playlist_id}
+                        onChange={(e) => updateSponsorsConfig('timer_playlist_id', e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+                      >
+                        <option value="">Selecione uma playlist...</option>
+                        {(dojoSettings.playlists || []).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Playlist de Patrocinadores (Placar)</label>
+                      <select
+                        value={sponsorsConfig.scoreboard_playlist_id}
+                        onChange={(e) => updateSponsorsConfig('scoreboard_playlist_id', e.target.value)}
                         className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
                       >
                         <option value="">Selecione uma playlist...</option>
@@ -2260,7 +2275,8 @@ export default function App() {
   const [sponsorsConfig, setSponsorsConfig] = useState({
     timer_active: false,
     scoreboard_active: false,
-    playlist_id: '',
+    timer_playlist_id: '',
+    scoreboard_playlist_id: '',
     interval: 15
   });
   const [isFullscreenMedia, setIsFullscreenMedia] = useState(false);
@@ -2504,15 +2520,25 @@ export default function App() {
     });
   }, [schedules, isTimerActive, activeMedia, activeManualPlaylist, currentClock]);
 
-  const userSponsors = useMemo(() => {
-    if (!sponsorsConfig.playlist_id) return [];
-    const playlist = dojoSettings.playlists?.find(p => p.id === sponsorsConfig.playlist_id);
+  const timerSponsors = useMemo(() => {
+    if (!sponsorsConfig.timer_playlist_id) return [];
+    const playlist = dojoSettings.playlists?.find(p => p.id === sponsorsConfig.timer_playlist_id);
     if (!playlist) return [];
     return playlist.media_ids
       .map(id => mediaList.find(m => m.id === id))
       .filter((m): m is MediaItem => m !== undefined)
       .map(m => ({ url: m.url, type: m.type }));
-  }, [sponsorsConfig.playlist_id, dojoSettings.playlists, mediaList]);
+  }, [sponsorsConfig.timer_playlist_id, dojoSettings.playlists, mediaList]);
+
+  const scoreboardSponsors = useMemo(() => {
+    if (!sponsorsConfig.scoreboard_playlist_id) return [];
+    const playlist = dojoSettings.playlists?.find(p => p.id === sponsorsConfig.scoreboard_playlist_id);
+    if (!playlist) return [];
+    return playlist.media_ids
+      .map(id => mediaList.find(m => m.id === id))
+      .filter((m): m is MediaItem => m !== undefined)
+      .map(m => ({ url: m.url, type: m.type }));
+  }, [sponsorsConfig.scoreboard_playlist_id, dojoSettings.playlists, mediaList]);
 
   const activePlaylistMedia = useMemo(() => {
     if (activeManualPlaylist) {
@@ -2732,7 +2758,7 @@ export default function App() {
                         whiteName={scoreboardConfig.whiteName}
                         category={scoreboardConfig.category}
                         isFreePlan={!isStarter || sponsorsConfig.scoreboard_active}
-                        globalSponsors={isStarter && sponsorsConfig.scoreboard_active ? userSponsors : (dojoSettings.scoreboard_config?.free_sponsors || [])}
+                        globalSponsors={isStarter && sponsorsConfig.scoreboard_active ? scoreboardSponsors : (dojoSettings.scoreboard_config?.free_sponsors || [])}
                         globalSponsorInterval={isStarter && sponsorsConfig.scoreboard_active ? sponsorsConfig.interval : (dojoSettings.scoreboard_config?.free_sponsor_interval || 15)}
                       />
                     </div>
@@ -2744,7 +2770,7 @@ export default function App() {
                         volume={volume} 
                         initialConfig={dojoSettings.timer_config}
                         isFreePlan={!isStarter || sponsorsConfig.timer_active}
-                        globalSponsors={isStarter && sponsorsConfig.timer_active ? userSponsors : (dojoSettings.timer_config?.free_sponsors || [])}
+                        globalSponsors={isStarter && sponsorsConfig.timer_active ? timerSponsors : (dojoSettings.timer_config?.free_sponsors || [])}
                         globalSponsorInterval={isStarter && sponsorsConfig.timer_active ? sponsorsConfig.interval : (dojoSettings.timer_config?.free_sponsor_interval || 15)}
                       />
                       {activeMedia && (
