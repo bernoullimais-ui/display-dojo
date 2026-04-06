@@ -51,9 +51,10 @@ export default function Scoreboard({
   useEffect(() => {
     if (!isFreePlan || globalSponsors.length <= 1) return;
     
+    const safeInterval = Math.max(1, globalSponsorInterval || 15);
     const interval = setInterval(() => {
       setSponsorIndex(prev => (prev + 1) % globalSponsors.length);
-    }, globalSponsorInterval * 1000);
+    }, safeInterval * 1000);
     
     return () => clearInterval(interval);
   }, [isFreePlan, globalSponsors.length, globalSponsorInterval]);

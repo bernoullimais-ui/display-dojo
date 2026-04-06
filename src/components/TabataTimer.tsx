@@ -43,10 +43,19 @@ const DEFAULT_CONFIG: TabataConfig = {
 };
 
 export default function TabataTimer({ externalCommand, isMuted = true, volume = 50, initialConfig, isFreePlan, globalSponsors = [], globalSponsorInterval = 15 }: TabataTimerProps) {
-  const [config, setConfig] = useState<TabataConfig>(initialConfig || DEFAULT_CONFIG);
+  const [config, setConfig] = useState<TabataConfig>(() => {
+    const merged = { ...DEFAULT_CONFIG, ...(initialConfig || {}) };
+    return {
+      ...merged,
+      prepTime: Math.max(1, merged.prepTime),
+      workTime: Math.max(1, merged.workTime),
+      restTime: Math.max(1, merged.restTime),
+      cycles: Math.max(1, merged.cycles)
+    };
+  });
   const [phase, setPhase] = useState<Phase>('PREP');
   const [currentCycle, setCurrentCycle] = useState(1);
-  const [timeLeft, setTimeLeft] = useState((initialConfig || DEFAULT_CONFIG).prepTime);
+  const [timeLeft, setTimeLeft] = useState(config.prepTime);
   const [isActive, setIsActive] = useState(false);
   const [ttsAudios, setTtsAudios] = useState<Record<string, string>>({});
   const [ttsFailed, setTtsFailed] = useState<Record<string, boolean>>({});
@@ -55,9 +64,10 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   useEffect(() => {
     if (!isFreePlan || globalSponsors.length <= 1) return;
     
+    const safeInterval = Math.max(1, globalSponsorInterval || 15);
     const interval = setInterval(() => {
       setSponsorIndex(prev => (prev + 1) % globalSponsors.length);
-    }, globalSponsorInterval * 1000);
+    }, safeInterval * 1000);
     
     return () => clearInterval(interval);
   }, [isFreePlan, globalSponsors.length, globalSponsorInterval]);
@@ -169,9 +179,17 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   // Update config when initialConfig changes
   useEffect(() => {
     if (initialConfig) {
-      setConfig(initialConfig);
+      const newConfig = { 
+        ...DEFAULT_CONFIG, 
+        ...initialConfig,
+        prepTime: Math.max(1, initialConfig.prepTime || DEFAULT_CONFIG.prepTime),
+        workTime: Math.max(1, initialConfig.workTime || DEFAULT_CONFIG.workTime),
+        restTime: Math.max(1, initialConfig.restTime || DEFAULT_CONFIG.restTime),
+        cycles: Math.max(1, initialConfig.cycles || DEFAULT_CONFIG.cycles)
+      };
+      setConfig(newConfig);
       if (!isActive && phase === 'PREP') {
-        setTimeLeft(initialConfig.prepTime);
+        setTimeLeft(newConfig.prepTime);
       }
     }
   }, [initialConfig, isActive, phase]);
