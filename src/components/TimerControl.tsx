@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion } from 'motion/react';
-import { Timer as TimerIcon, Upload, Check, XCircle, Zap, Coffee, RotateCcw, Volume2, Trash2 } from 'lucide-react';
+import { Timer as TimerIcon, Upload, Check, XCircle, Zap, Coffee, RotateCcw, Volume2, Trash2, Lock } from 'lucide-react';
 import { TimerPreset } from '../types';
 
 interface TimerControlProps {
