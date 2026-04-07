@@ -49,7 +49,8 @@ export default function SponsorReports({ teacherId }: SponsorReportsProps) {
           aggregated[key] = (aggregated[key] || 0) + 1;
         });
 
-        const formattedData = Object.entries(aggregated).map(([key, count]) => {
+        const formattedData = Object.keys(aggregated).map(key => {
+          const count = aggregated[key];
           const [date, sponsor] = key.split('|');
           return { date, sponsor, displays: count };
         });

@@ -197,6 +197,28 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  // Initialize Audio Context on first interaction to comply with browser policies
+  useEffect(() => {
+    const initAudio = () => {
+      try {
+        if (!audioContextRef.current) {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtx) {
+            audioContextRef.current = new AudioCtx();
+          }
+        }
+      } catch (e) {
+        console.warn('AudioContext not supported or failed to initialize', e);
+      }
+    };
+    window.addEventListener('click', initAudio, { once: true });
+    window.addEventListener('touchstart', initAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', initAudio);
+      window.removeEventListener('touchstart', initAudio);
+    };
+  }, []);
+
   const playSound = useCallback((frequency: number, duration: number, type: OscillatorType = 'sine') => {
     if (isMuted) return;
     
@@ -206,7 +228,12 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
     
     try {
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          audioContextRef.current = new AudioCtx();
+        } else {
+          return;
+        }
       }
       
       const ctx = audioContextRef.current;
@@ -397,7 +424,7 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
               className="w-full h-full"
             >
               {currentSponsor.type === 'video' ? (
-                <video src={currentSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
+                <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
               ) : (
                 <img src={currentSponsor.url} className="w-full h-full object-cover" />
               )}
@@ -501,7 +528,7 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
               className="w-full h-full"
             >
               {currentSponsor.type === 'video' ? (
-                <video src={currentSponsor.url} autoPlay loop muted className="w-full h-full object-cover" />
+                <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
               ) : (
                 <img src={currentSponsor.url} className="w-full h-full object-cover" />
               )}

@@ -555,7 +555,7 @@ export default function GlobalMediaManager() {
                 )}
                 <button 
                   onClick={() => deleteMedia(item.id, item.url)} 
-                  className="absolute top-2 right-2 bg-black/80 text-red-500 p-2 rounded-full backdrop-blur-sm active:scale-95 transition-transform z-10 opacity-0 group-hover:opacity-100"
+                  className="absolute top-2 right-2 bg-black/80 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10 opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 size={16} />
                 </button>

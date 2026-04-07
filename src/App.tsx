@@ -1557,7 +1557,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
                         </button>
                       </div>
                       {item.teacher_id !== 'GLOBAL' && (
-                        <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full backdrop-blur-sm active:scale-95 transition-transform z-10">
+                        <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10">
                           <Trash2 size={18} />
                         </button>
                       )}
@@ -2210,7 +2210,7 @@ function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }
             {planSubTab === 'REPORTS' && (
               <div className="relative">
                 {!isBusiness && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-sm rounded-3xl p-6 text-center border border-zinc-800">
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/90 rounded-3xl p-6 text-center border border-zinc-800">
                     <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mb-4">
                       <Lock size={32} className="text-blue-500" />
                     </div>
@@ -2266,6 +2266,12 @@ export default function App() {
     whiteName: 'BRANCO',
     category: ''
   });
+
+  const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
+  const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+  const isBusiness = ['BUSINESS'].includes(tier);
+
   const [tickerConfig, setTickerConfig] = useState({
     text: '',
     active: false
@@ -2507,7 +2513,11 @@ export default function App() {
     if (isTimerActive || activeMedia || activeManualPlaylist) return []; // Priority: Timer > Manual Media/Playlist > Schedule
 
     const currentDay = currentClock.getDay();
-    const currentTimeStr = `${currentClock.getHours().toString().padStart(2, '0')}:${currentClock.getMinutes().toString().padStart(2, '0')}`;
+    const h = currentClock.getHours();
+    const m = currentClock.getMinutes();
+    const hStr = h < 10 ? '0' + h : h.toString();
+    const mStr = m < 10 ? '0' + m : m.toString();
+    const currentTimeStr = `${hStr}:${mStr}`;
 
     return schedules.filter(s => {
       const start = s.start_time.substring(0, 5);
@@ -2783,7 +2793,7 @@ export default function App() {
                         <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-[3rem] border border-zinc-800'}`}>
                           {renderMedia((activeMedia || currentScheduledMedia)!, !activeMedia)}
                           {!isFullscreenMedia && (
-                            <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
+                            <div className="absolute top-8 left-8 bg-black/80 px-6 py-3 rounded-2xl border border-white/10">
                               <p className="text-lg font-black uppercase tracking-widest flex items-center gap-3">
                                 {activeMedia || activeManualPlaylist ? <PlayCircle className="text-blue-500" /> : activeSchedules.length > 0 ? <Calendar className="text-amber-500" /> : <Tv className="text-purple-500" />}
                                 {activeMedia ? 'AO VIVO' : activeManualPlaylist ? 'PLAYLIST' : activeSchedules.length > 0 ? 'PROGRAMADO' : 'PLAYLIST DA TV'}

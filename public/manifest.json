@@ -1,7 +1,7 @@
 {
-  "name": "TV DOJO",
-  "short_name": "TV DOJO",
-  "description": "Controle remoto para o TV DOJO",
+  "name": "DOJO TV",
+  "short_name": "DOJO TV",
+  "description": "Controle remoto para o DOJO TV",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",

@@ -19,7 +19,12 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
 
     const generateCode = async () => {
       // Check if we have a saved code
-      const savedCode = localStorage.getItem('dojo_tv_code');
+      let savedCode = null;
+      try {
+        savedCode = localStorage.getItem('dojo_tv_code');
+      } catch (e) {
+        console.warn('localStorage not available', e);
+      }
       
       if (savedCode) {
         // Verify if session still exists and is valid
@@ -49,7 +54,11 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
       setPairingCode(code);
       setStatus('pending');
-      localStorage.setItem('dojo_tv_code', code);
+      try {
+        localStorage.setItem('dojo_tv_code', code);
+      } catch (e) {
+        console.warn('localStorage not available', e);
+      }
 
       // 1. Create a session in Supabase
       const { error } = await supabase
@@ -111,7 +120,7 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           </div>
           <h2 className="text-2xl font-bold">Configuração Necessária</h2>
           <p className="text-zinc-400">
-            Para que o **TV DOJO** funcione, você precisa configurar as chaves do Supabase no painel de **Settings** do AI Studio.
+            Para que o **DOJO TV** funcione, você precisa configurar as chaves do Supabase no painel de **Settings** do AI Studio.
           </p>
           <div className="text-left bg-black p-4 rounded-xl font-mono text-xs text-zinc-500 space-y-2 border border-zinc-800">
             <div>VITE_SUPABASE_URL</div>
@@ -153,7 +162,7 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
           </div>
           
           <h1 className="text-5xl font-bold tracking-tight">
-            {status === 'paired' ? 'Conectado!' : 'Conectar TV DOJO'}
+            {status === 'paired' ? 'Conectado!' : 'Conectar DOJO TV'}
           </h1>
           <p className="text-zinc-400 text-xl max-w-md mx-auto">
             {status === 'paired' 
@@ -163,7 +172,7 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
         </div>
 
         <div className="relative group mx-auto max-w-fit">
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl opacity-25 group-hover:opacity-50 transition duration-1000"></div>
           <div className="relative bg-zinc-900 border border-zinc-800 p-10 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center gap-12">
             {status === 'generating' ? (
               <div className="flex items-center justify-center gap-3 text-zinc-500 p-10">
@@ -210,8 +219,8 @@ export default function TVPairing({ onPaired }: TVPairingProps) {
 
       {/* Background decoration */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden -z-10">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-900/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/10 blur-[120px] rounded-full" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-900/10 rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full" />
       </div>
     </div>
   );
