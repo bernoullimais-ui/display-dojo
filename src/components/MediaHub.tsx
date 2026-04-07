@@ -14,6 +14,20 @@ interface MediaHubProps {
   handleCommand: (type: string, payload?: any) => void;
   activeSubTab: 'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS';
   setActiveSubTab: React.Dispatch<React.SetStateAction<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>>;
+  mediaList: MediaItem[];
+  setMediaList: React.Dispatch<React.SetStateAction<MediaItem[]>>;
+  schedules: ScheduleItem[];
+  isUploading: boolean;
+  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, mode?: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST', onLogoUpload?: (url: string) => void, onAudioUpload?: (mode: string, url: string) => void, sponsorName?: string) => Promise<void>;
+  deleteMedia: (id: string, url: string) => Promise<void>;
+  addSchedule: (schedule: any) => Promise<void>;
+  deleteSchedule: (id: string) => Promise<void>;
+  tickerConfig: any;
+  sponsorsConfig: any;
+  updateTickerConfig: (field: 'text' | 'active', value: string | boolean) => Promise<void>;
+  updateSponsorsConfig: (field: string, value: any) => Promise<void>;
+  updatePlaylists: (playlists: Playlist[]) => Promise<void>;
+  handleConfigChange: (newSettings: any) => Promise<void>;
 }
 
 export default function MediaHub({
@@ -25,11 +39,22 @@ export default function MediaHub({
   setDojoSettings,
   handleCommand,
   activeSubTab,
-  setActiveSubTab
+  setActiveSubTab,
+  mediaList,
+  setMediaList,
+  schedules,
+  isUploading,
+  handleFileUpload,
+  deleteMedia,
+  addSchedule,
+  deleteSchedule,
+  tickerConfig,
+  sponsorsConfig,
+  updateTickerConfig,
+  updateSponsorsConfig,
+  updatePlaylists,
+  handleConfigChange
 }: MediaHubProps) {
-  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [mediaUrlInput, setMediaUrlInput] = useState('');
   const [mediaSponsorInput, setMediaSponsorInput] = useState('');
@@ -42,58 +67,6 @@ export default function MediaHub({
     end_time: '10:00'
   });
   const [dojoForm, setDojoForm] = useState({ name: dojoSettings.name || '', city: dojoSettings.city || '', state: dojoSettings.state || '' });
-  const [tickerConfig, setTickerConfig] = useState(dojoSettings.ticker_config || { text: '', active: false });
-  const [sponsorsConfig, setSponsorsConfig] = useState(dojoSettings.sponsors_config || {
-    timer_active: false,
-    scoreboard_active: false,
-    timer_playlist_id: '',
-    scoreboard_playlist_id: '',
-    interval: 15
-  });
-
-  
-  const updateConfig = async (key: string, value: any) => {
-    const newConfig = { ...(dojoSettings.timer_config || {}), [key]: value };
-    const { error } = await supabase
-      .from('dojo_settings')
-      .upsert({
-        teacher_id: teacherId,
-        timer_config: newConfig,
-        updated_at: new Date().toISOString()
-      });
-    if (!error) {
-      setDojoSettings({ ...dojoSettings, timer_config: newConfig });
-      handleCommand('SETTINGS_UPDATE', { ...dojoSettings, timer_config: newConfig });
-    }
-  };
-
-  const updatePlaylists = async (newPlaylists: Playlist[]) => {
-    const newSettings = { ...dojoSettings, playlists: newPlaylists };
-    setDojoSettings(newSettings);
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ playlists: newPlaylists }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateTickerConfig = async (field: 'text' | 'active', value: string | boolean) => {
-    const newConfig = { ...tickerConfig, [field]: value };
-    setTickerConfig(newConfig);
-    handleCommand('TICKER_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ ticker_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateSponsorsConfig = async (field: keyof typeof sponsorsConfig, value: any) => {
-    const newConfig = { ...sponsorsConfig, [field]: value };
-    setSponsorsConfig(newConfig);
-    handleCommand('SPONSORS_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ sponsors_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
 
   const saveDojoConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +112,6 @@ export default function MediaHub({
   };
 
   const handleAddSchedule = async () => {
-    if (!supabase) return;
     if (!newSchedule.playlist_id) return alert('Selecione uma playlist!');
     if (newSchedule.days_of_week.length === 0) return alert('Selecione pelo menos um dia!');
     
@@ -151,167 +123,22 @@ export default function MediaHub({
       end_time: newSchedule.end_time
     }));
 
-    const { data, error } = await supabase
-      .from('schedules')
-      .insert(payloads)
-      .select('*, media:media_id(*)');
-
-    if (error) {
-      alert('Erro ao salvar agendamento');
-    } else if (data) {
-      setSchedules([...schedules, ...data]);
-      setShowAddSchedule(false);
-    }
+    await addSchedule(payloads);
+    setShowAddSchedule(false);
   };
 
   
-  const handleDeleteMedia = async (id: string, url: string) => {
-    if (!supabase) return;
-    try {
-      const path = url.split('dojo-media/')[1];
-      await supabase.storage.from('dojo-media').remove([path]);
-      await supabase.from('media').delete().eq('id', id);
-      setMediaList(mediaList.filter(m => m.id !== id));
-    } catch (error) {
-      console.error('Delete failed:', error);
-    }
-  };
+  
 
-  const handleDeleteSchedule = async (id: string) => {
-    if (!supabase) return;
-    await supabase.from('schedules').delete().eq('id', id);
-    setSchedules(schedules.filter(s => s.id !== id));
-  };
+  
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!supabase) return;
-      
-      const { data: mediaData } = await supabase
-        .from('media')
-        .select('*')
-        .in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000'])
-        .order('created_at', { ascending: false });
 
-      const { data: scheduleData } = await supabase
-        .from('schedules')
-        .select('*, media:media_id(*)')
-        .eq('teacher_id', teacherId);
 
-      if (mediaData) setMediaList(mediaData);
-      if (scheduleData) setSchedules(scheduleData);
-    };
-    fetchData();
-  }, [teacherId]);
 
-  useEffect(() => {
-    setDojoForm({ name: dojoSettings.name || '', city: dojoSettings.city || '', state: dojoSettings.state || '' });
-    if (dojoSettings.ticker_config) setTickerConfig(dojoSettings.ticker_config);
-    if (dojoSettings.sponsors_config) setSponsorsConfig(dojoSettings.sponsors_config);
-  }, [dojoSettings]);
 
-  const checkVideoDuration = (file: File): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(video.src);
-        resolve(video.duration);
-      };
-      video.onerror = () => reject('Erro ao carregar vídeo');
-      video.src = URL.createObjectURL(file);
-    });
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, mode: 'MEDIA' | 'LOGO' = 'MEDIA') => {
-    const file = e.target.files?.[0];
-    if (!file || !supabase) return;
-
-    if (mode === 'MEDIA') {
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      const currentImages = mediaList.filter(m => m.type === 'image').length;
-      const currentVideos = mediaList.filter(m => m.type === 'video').length;
-
-      if (type === 'video') {
-        if (!isPro) return alert('Upload de vídeos disponível a partir do plano PRÓ.');
-        
-        try {
-          const duration = await checkVideoDuration(file);
-          if (!isBusiness && duration > 15) return alert('No plano PRÓ, vídeos podem ter no máximo 15 segundos.');
-          if (isBusiness && duration > 30) return alert('No plano BUSINESS, vídeos podem ter no máximo 30 segundos.');
-        } catch (e) {
-          return alert('Não foi possível verificar a duração do vídeo.');
-        }
-
-        if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
-      } else {
-        if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
-        if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
-      }
-    }
-
-    setIsUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${teacherId}/${mode.toLowerCase()}_${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('dojo-media')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        if (uploadError.message.includes('bucket not found') || uploadError.message.includes('Bucket not found')) {
-          alert('ERRO: O bucket "dojo-media" não foi encontrado no seu Supabase.');
-        } else {
-          throw uploadError;
-        }
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('dojo-media')
-        .getPublicUrl(filePath);
-
-      if (mode === 'LOGO') {
-        const { error: dbError } = await supabase
-          .from('dojo_settings')
-          .upsert({
-            teacher_id: teacherId,
-            logo_url: publicUrl,
-            updated_at: new Date().toISOString()
-          });
-        if (dbError) throw dbError;
-        setDojoSettings(prev => ({ ...prev, logo_url: publicUrl }));
-        handleCommand('SETTINGS_UPDATE', { ...dojoSettings, logo_url: publicUrl });
-      } else {
-        const type = file.type.startsWith('video') ? 'video' : 'image';
-        const { data: mediaData, error: dbError } = await supabase
-          .from('media')
-          .insert([{
-            teacher_id: teacherId,
-            name: file.name,
-            url: publicUrl,
-            type: type,
-            sponsor_name: mediaSponsorInput || null
-          }])
-          .select()
-          .single();
-
-        if (dbError) throw dbError;
-        setMediaList([mediaData, ...mediaList]);
-        setMediaSponsorInput('');
-      }
-    } catch (error: any) {
-      console.error('Upload failed:', error);
-      alert('Falha no upload: ' + (error.message || 'Erro desconhecido'));
-    } finally {
-      setIsUploading(false);
-    }
-  };
 
   const handleAddMediaUrl = async () => {
     if (!mediaUrlInput || !supabase) return;
@@ -331,7 +158,6 @@ export default function MediaHub({
       if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
     }
 
-    setIsUploading(true);
     try {
       let name = mediaUrlInput.split('/').pop()?.split('?')[0] || 'Mídia via URL';
       
@@ -359,8 +185,6 @@ export default function MediaHub({
     } catch (error: any) {
       console.error('URL add failed:', error);
       alert('Falha ao adicionar URL: ' + (error.message || 'Erro desconhecido'));
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -492,7 +316,7 @@ export default function MediaHub({
                         </button>
                       </div>
                       {item.teacher_id !== 'GLOBAL' && (
-                        <button onClick={() => handleDeleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10">
+                        <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10">
                           <Trash2 size={18} />
                         </button>
                       )}
@@ -539,7 +363,7 @@ export default function MediaHub({
                   min="5"
                   max="300"
                   defaultValue={(dojoSettings.timer_config || {}).imageDuration || 15}
-                  onBlur={(e) => updateConfig('imageDuration', parseInt(e.target.value))}
+                  onBlur={(e) => handleConfigChange({ imageDuration: parseInt(e.target.value) })}
                   className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
                 />
               </div>
@@ -643,7 +467,7 @@ export default function MediaHub({
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => handleDeleteSchedule(s.id)} className="text-zinc-600 hover:text-red-500 p-2">
+                  <button onClick={() => deleteSchedule(s.id)} className="text-zinc-600 hover:text-red-500 p-2">
                     <Trash2 size={18} />
                   </button>
                 </div>
@@ -896,7 +720,7 @@ export default function MediaHub({
                   min="1"
                   max="60"
                   defaultValue={(dojoSettings.timer_config || {}).splashDuration || 4}
-                  onBlur={(e) => updateConfig('splashDuration', parseInt(e.target.value))}
+                  onBlur={(e) => handleConfigChange({ splashDuration: parseInt(e.target.value) })}
                   className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
                 />
               </div>

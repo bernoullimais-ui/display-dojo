@@ -13,6 +13,9 @@ import { supabase } from '../lib/supabase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 import { MediaItem, TimerPreset, Playlist, DojoSettings, ScheduleItem } from '../types';
+import { useTVManager } from '../hooks/useTVManager';
+import { useDojoSync } from '../hooks/useDojoSync';
+import { useMediaManager } from '../hooks/useMediaManager';
 import MediaHub from './MediaHub';
 import ScoreboardControl from './ScoreboardControl';
 import TimerControl from './TimerControl';
@@ -32,50 +35,58 @@ const getYouTubeEmbedUrl = (url: string) => {
 };
 
 export default function RemoteControl({ initialPairingCode, teacherId, onSendCommand, onClose }: RemoteControlProps) {
-  const [activeTvId, setActiveTvId] = useState<string>(initialPairingCode);
-  const [tvSessions, setTvSessions] = useState<any[]>([]);
+  
+
+
+  const {
+    dojoSettings, setDojoSettings,
+    localConfig, setLocalConfig,
+    scoreboardConfig, setScoreboardConfig,
+    tickerConfig, setTickerConfig,
+    sponsorsConfig, setSponsorsConfig,
+    activePresets, savePreset, deletePreset,
+    updateConfig, updateColor, updateLabel,
+    updateScoreboard, handleScoreUpdate,
+    removeAudio, toggleTTS,
+    updateScoreboardConfig, updateTickerConfig,
+    updateSponsorsConfig, updatePlaylists, updateTvPlaylist,
+    handleConfigChange
+  } = useDojoSync(teacherId, (type, payload) => onSendCommand(activeTvId, type, payload));
+
+  const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
+  const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+  const isBusiness = ['BUSINESS'].includes(tier);
+
+  const {
+    tvSessions, setTvSessions, activeTvId, setActiveTvId,
+    showTvManager, setShowTvManager,
+    showAddTv, setShowAddTv,
+    newTvCode, setNewTvCode,
+    addTvError, isAddingTv,
+    isScanning, setIsScanning,
+    disconnectingId, setDisconnectingId, disconnectedId, setDisconnectedId,
+    handleAddTv, handleDisconnectTv, handleUpdateTvPlaylist
+  } = useTVManager(teacherId, isBusiness);
+
+    const handleCommand = (type: string, payload?: any) => {
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    onSendCommand(activeTvId, type, payload);
+  };
+
+  const {
+    mediaList, setMediaList,
+    schedules, setSchedules,
+    isUploading, handleFileUpload,
+    deleteMedia, addSchedule, deleteSchedule
+  } = useMediaManager(teacherId, isPro, isBusiness);
+
   const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB' | 'PLAN'>('TIMER');
   const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
   const [planSubTab, setPlanSubTab] = useState<'INFO' | 'REPORTS'>('INFO');
-  const [scoreboardConfig, setScoreboardConfig] = useState({
-    blueName: 'AZUL',
-    whiteName: 'BRANCO',
-    category: ''
-  });
-  const [tickerConfig, setTickerConfig] = useState({
-    text: '',
-    active: false
-  });
-  const [sponsorsConfig, setSponsorsConfig] = useState({
-    timer_active: false,
-    scoreboard_active: false,
-    timer_playlist_id: '',
-    scoreboard_playlist_id: '',
-    interval: 15
-  });
-  const [localConfig, setLocalConfig] = useState({
-    prepTime: 10,
-    workTime: 20,
-    restTime: 10,
-    cycles: 8,
-    prepLabel: 'PREPARAÇÃO',
-    workLabel: 'TRABALHO',
-    restLabel: 'DESCANSO',
-    prepColor: '#f59e0b',
-    workColor: '#ef4444',
-    restColor: '#22c55e',
-    useTTS: false,
-    prepAudioUrl: '',
-    workAudioUrl: '',
-    restAudioUrl: '',
-    imageDuration: 15,
-    splashDuration: 4
-  });
-  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
   const [dojoForm, setDojoForm] = useState({ name: '', city: '', state: '' });
-  const [isUploading, setIsUploading] = useState(false);
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showPresetManager, setShowPresetManager] = useState(false);
   const [editingPreset, setEditingPreset] = useState<TimerPreset | null>(null);
@@ -86,103 +97,41 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
   const [showVolumePopup, setShowVolumePopup] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
-  const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
-  const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
-  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
-  const isBusiness = ['BUSINESS'].includes(tier);
   const [newSchedule, setNewSchedule] = useState({
     playlist_id: '',
     days_of_week: [new Date().getDay()],
     start_time: '08:00',
     end_time: '10:00'
   });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Set initial activeTvId if not set
+  useEffect(() => {
+    if (!activeTvId && initialPairingCode) {
+      setActiveTvId(initialPairingCode);
+    }
+  }, [initialPairingCode]);
+
+  const toggleMute = () => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    handleCommand('AUDIO_MUTE', newMuted);
+  };
+
+  const updateVolume = (val: number) => {
+    setVolume(val);
+    if (isMuted && val > 0) {
+      setIsMuted(false);
+      handleCommand('AUDIO_MUTE', false);
+    }
+    handleCommand('AUDIO_VOLUME', val);
+  };
+
+const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const prepAudioRef = useRef<HTMLInputElement>(null);
   const workAudioRef = useRef<HTMLInputElement>(null);
   const restAudioRef = useRef<HTMLInputElement>(null);
 
-  // Fetch data
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!supabase) return;
-      
-      const { data: mediaData } = await supabase
-        .from('media')
-        .select('*')
-        .in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000'])
-        .order('created_at', { ascending: false });
-
-      const { data: scheduleData } = await supabase
-        .from('schedules')
-        .select('*, media:media_id(*)')
-        .eq('teacher_id', teacherId);
-
-      const { data: settingsData } = await supabase
-        .from('dojo_settings')
-        .select('*')
-        .eq('teacher_id', teacherId)
-        .maybeSingle();
-
-      const { data: globalSettingsData } = await supabase
-        .from('dojo_settings')
-        .select('*')
-        .eq('teacher_id', '00000000-0000-0000-0000-000000000000')
-        .maybeSingle();
-
-      if (mediaData) {
-        setMediaList(mediaData);
-      }
-      if (scheduleData) setSchedules(scheduleData);
-      
-      const mergedSettings = {
-        ...globalSettingsData,
-        ...settingsData,
-        name: settingsData?.name || globalSettingsData?.name || 'Meu Dojo',
-        logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || '',
-        scoreboard_config: {
-          ...(globalSettingsData?.scoreboard_config || {}),
-          ...(settingsData?.scoreboard_config || {})
-        },
-        timer_config: {
-          ...(globalSettingsData?.timer_config || {}),
-          ...(settingsData?.timer_config || {})
-        }
-      };
-
-      if (mergedSettings) {
-        setDojoSettings(mergedSettings);
-        setDojoForm({
-          name: mergedSettings.name || '',
-          city: mergedSettings.city || mergedSettings.timer_config?.city || '',
-          state: mergedSettings.state || mergedSettings.timer_config?.state || ''
-        });
-        if (mergedSettings.timer_config) {
-          setLocalConfig(prev => ({ ...prev, ...mergedSettings.timer_config }));
-        }
-        if (mergedSettings.scoreboard_config) {
-          setScoreboardConfig(prev => ({ ...prev, ...mergedSettings.scoreboard_config }));
-        }
-        if (mergedSettings.ticker_config) {
-          setTickerConfig(prev => ({ ...prev, ...mergedSettings.ticker_config }));
-        }
-        if (mergedSettings.sponsors_config) {
-          setSponsorsConfig(prev => ({ ...prev, ...mergedSettings.sponsors_config }));
-        }
-      }
-    };
-
-    fetchData();
-  }, [teacherId]);
-
-  const [showTvManager, setShowTvManager] = useState(false);
-  const [showAddTv, setShowAddTv] = useState(false);
-  const [newTvCode, setNewTvCode] = useState('');
-  const [addTvError, setAddTvError] = useState('');
-  const [isAddingTv, setIsAddingTv] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
-  const [disconnectedId, setDisconnectedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isScanning) {
@@ -256,477 +205,6 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
     }
   }, [tvSessions, activeTvId]);
 
-  const handleCommand = (type: string, payload?: any) => {
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
-    onSendCommand(activeTvId, type, payload);
-  };
-
-  const updateConfig = async (field: string, value: number) => {
-    const newConfig = { ...localConfig, [field]: value };
-    setLocalConfig(newConfig);
-    handleCommand('CONFIG_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ timer_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category', value: string) => {
-    const newConfig = { ...scoreboardConfig, [field]: value };
-    setScoreboardConfig(newConfig);
-    
-    if (field === 'category') {
-      handleCommand('SCOREBOARD_SET_CATEGORY', value);
-    } else {
-      handleCommand('SCOREBOARD_SET_NAMES', { 
-        blue: field === 'blueName' ? value : scoreboardConfig.blueName,
-        white: field === 'whiteName' ? value : scoreboardConfig.whiteName
-      });
-    }
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ scoreboard_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateTickerConfig = async (field: 'text' | 'active', value: string | boolean) => {
-    const newConfig = { ...tickerConfig, [field]: value };
-    setTickerConfig(newConfig);
-    handleCommand('TICKER_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ ticker_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateSponsorsConfig = async (field: keyof typeof sponsorsConfig, value: any) => {
-    const newConfig = { ...sponsorsConfig, [field]: value };
-    setSponsorsConfig(newConfig);
-    handleCommand('SPONSORS_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ sponsors_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updatePlaylists = async (newPlaylists: Playlist[]) => {
-    const newSettings = { ...dojoSettings, playlists: newPlaylists };
-    setDojoSettings(newSettings);
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ playlists: newPlaylists }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateTvPlaylist = async (tvId: string, playlistId: string) => {
-    const newTvPlaylists = { ...(dojoSettings.tv_playlists || {}), [tvId]: playlistId };
-    const newSettings = { ...dojoSettings, tv_playlists: newTvPlaylists };
-    setDojoSettings(newSettings);
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ tv_playlists: newTvPlaylists }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const handleConfigChange = async (newSettings: Partial<typeof localConfig>) => {
-    const newConfig = { ...localConfig, ...newSettings };
-    setLocalConfig(newConfig);
-    handleCommand('CONFIG_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ timer_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const updateLabel = async (field: string, value: string) => {
-    const newConfig = { ...localConfig, [field]: value };
-    setLocalConfig(newConfig);
-    handleCommand('CONFIG_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ timer_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const defaultPresets: TimerPreset[] = [
-    { id: '1', name: 'Randori', config: { prepTime: 10, workTime: 300, restTime: 60, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'RANDORI', restLabel: 'DESCANSO' } },
-    { id: '2', name: 'Uchikomi', config: { prepTime: 10, workTime: 60, restTime: 10, cycles: 10, prepLabel: 'PREPARAÇÃO', workLabel: 'UCHIKOMI', restLabel: 'TROCA' } },
-    { id: '3', name: 'Tabata', config: { prepTime: 10, workTime: 20, restTime: 10, cycles: 8, prepLabel: 'PREPARAÇÃO', workLabel: 'TRABALHO', restLabel: 'DESCANSO' } },
-    { id: '4', name: 'Newaza', config: { prepTime: 10, workTime: 120, restTime: 30, cycles: 6, prepLabel: 'PREPARAÇÃO', workLabel: 'NEWAZA', restLabel: 'DESCANSO' } }
-  ];
-
-  const activePresets = dojoSettings.presets || defaultPresets;
-
-  const savePreset = async (preset: TimerPreset) => {
-    if (!supabase || !teacherId) return;
-    
-    let newPresets = [...activePresets];
-    const existingIndex = newPresets.findIndex(p => p.id === preset.id);
-    
-    if (existingIndex >= 0) {
-      newPresets[existingIndex] = preset;
-    } else {
-      newPresets.push(preset);
-    }
-
-    const newSettings = { ...dojoSettings, presets: newPresets };
-    setDojoSettings(newSettings);
-    
-    await supabase.from('dojo_settings').update({ presets: newPresets }).eq('teacher_id', teacherId);
-    setEditingPreset(null);
-    setShowPresetManager(false);
-  };
-
-  const deletePreset = async (id: string) => {
-    if (!supabase || !teacherId) return;
-    
-    const newPresets = activePresets.filter(p => p.id !== id);
-    const newSettings = { ...dojoSettings, presets: newPresets };
-    setDojoSettings(newSettings);
-    
-    await supabase.from('dojo_settings').update({ presets: newPresets }).eq('teacher_id', teacherId);
-  };
-
-  const updateColor = async (field: string, value: string) => {
-    const newConfig = { ...localConfig, [field]: value };
-    setLocalConfig(newConfig);
-    handleCommand('CONFIG_UPDATE', newConfig);
-    
-    if (supabase && teacherId) {
-      await supabase.from('dojo_settings').update({ timer_config: newConfig }).eq('teacher_id', teacherId);
-    }
-  };
-
-  const handleAddMediaUrl = async () => {
-    if (!mediaUrlInput || !supabase) return;
-    
-    const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
-    const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
-    const type = isVideo ? 'video' : 'image';
-    
-    const currentImages = mediaList.filter(m => m.type === 'image').length;
-    const currentVideos = mediaList.filter(m => m.type === 'video').length;
-
-    if (type === 'video') {
-      if (!isPro) return alert('Adição de vídeos disponível a partir do plano PRÓ.');
-      if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
-    } else {
-      if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
-      if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
-    }
-
-    setIsUploading(true);
-    try {
-      let name = mediaUrlInput.split('/').pop()?.split('?')[0] || 'Mídia via URL';
-      
-      if (isYouTube) {
-        name = 'Vídeo do YouTube';
-      }
-
-      const { data: mediaData, error: dbError } = await supabase
-        .from('media')
-        .insert([{
-          teacher_id: teacherId,
-          name: name,
-          url: mediaUrlInput,
-          type: type,
-          sponsor_name: mediaSponsorInput || null
-        }])
-        .select()
-        .single();
-
-      if (dbError) throw dbError;
-      setMediaList([mediaData, ...mediaList]);
-      setMediaUrlInput('');
-      setMediaSponsorInput('');
-      setShowUrlInput(false);
-    } catch (error: any) {
-      console.error('URL add failed:', error);
-      alert('Falha ao adicionar URL: ' + (error.message || 'Erro desconhecido'));
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const checkVideoDuration = (file: File): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(video.src);
-        resolve(video.duration);
-      };
-      video.onerror = () => reject('Erro ao carregar vídeo');
-      video.src = URL.createObjectURL(file);
-    });
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, mode: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST' = 'MEDIA') => {
-    const file = e.target.files?.[0];
-    if (!file || !supabase) return;
-
-    if (mode === 'MEDIA') {
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      const currentImages = mediaList.filter(m => m.type === 'image').length;
-      const currentVideos = mediaList.filter(m => m.type === 'video').length;
-
-      if (type === 'video') {
-        if (!isPro) return alert('Upload de vídeos disponível a partir do plano PRÓ.');
-        
-        try {
-          const duration = await checkVideoDuration(file);
-          if (!isBusiness && duration > 15) return alert('No plano PRÓ, vídeos podem ter no máximo 15 segundos.');
-          if (isBusiness && duration > 30) return alert('No plano BUSINESS, vídeos podem ter no máximo 30 segundos.');
-        } catch (e) {
-          return alert('Não foi possível verificar a duração do vídeo.');
-        }
-
-        if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
-      } else {
-        if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
-        if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
-      }
-    }
-
-    setIsUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${teacherId}/${mode.toLowerCase()}_${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('dojo-media')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        if (uploadError.message.includes('bucket not found') || uploadError.message.includes('Bucket not found')) {
-          alert('ERRO: O bucket "dojo-media" não foi encontrado no seu Supabase.');
-        } else {
-          throw uploadError;
-        }
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('dojo-media')
-        .getPublicUrl(filePath);
-
-      if (mode === 'LOGO') {
-        const { error: dbError } = await supabase
-          .from('dojo_settings')
-          .upsert({
-            teacher_id: teacherId,
-            logo_url: publicUrl,
-            updated_at: new Date().toISOString()
-          });
-        if (dbError) throw dbError;
-        setDojoSettings(prev => ({ ...prev, logo_url: publicUrl }));
-        handleCommand('SETTINGS_UPDATE', { ...dojoSettings, logo_url: publicUrl });
-      } else if (['PREP', 'WORK', 'REST'].includes(mode)) {
-        const field = mode === 'PREP' ? 'prepAudioUrl' : mode === 'WORK' ? 'workAudioUrl' : 'restAudioUrl';
-        const newConfig = { ...localConfig, [field]: publicUrl };
-        setLocalConfig(newConfig);
-        
-        const { error: dbError } = await supabase
-          .from('dojo_settings')
-          .upsert({
-            teacher_id: teacherId,
-            timer_config: newConfig,
-            updated_at: new Date().toISOString()
-          });
-        if (dbError) throw dbError;
-        handleCommand('SETTINGS_UPDATE', { ...dojoSettings, timer_config: newConfig });
-      } else {
-        const type = file.type.startsWith('video') ? 'video' : 'image';
-        const { data: mediaData, error: dbError } = await supabase
-          .from('media')
-          .insert([{
-            teacher_id: teacherId,
-            name: file.name,
-            url: publicUrl,
-            type: type,
-            sponsor_name: mediaSponsorInput || null
-          }])
-          .select()
-          .single();
-
-        if (dbError) throw dbError;
-        setMediaList([mediaData, ...mediaList]);
-        setMediaSponsorInput('');
-      }
-    } catch (error: any) {
-      console.error('Upload failed:', error);
-      alert('Falha no upload: ' + (error.message || 'Erro desconhecido'));
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const saveDojoConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supabase) return;
-    
-    if (!dojoForm.name || !dojoForm.city || !dojoForm.state) {
-      alert('Por favor, preencha o Nome do Dojo, Cidade e Estado.');
-      return;
-    }
-
-    const { error } = await supabase
-      .from('dojo_settings')
-      .upsert({
-        teacher_id: teacherId,
-        name: dojoForm.name,
-        city: dojoForm.city,
-        state: dojoForm.state,
-        updated_at: new Date().toISOString()
-      });
-    
-    if (!error) {
-      setDojoSettings(prev => ({ ...prev, name: dojoForm.name, city: dojoForm.city, state: dojoForm.state }));
-      handleCommand('SETTINGS_UPDATE', { ...dojoSettings, name: dojoForm.name, city: dojoForm.city, state: dojoForm.state });
-      alert('Configurações do Dojo salvas com sucesso!');
-    } else {
-      alert('Erro ao salvar configurações.');
-    }
-  };
-
-  const toggleMute = () => {
-    const newMuted = !isMuted;
-    setIsMuted(newMuted);
-    handleCommand('TOGGLE_MUTE', newMuted);
-  };
-
-  const handleAddTv = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTvCode.trim() || !supabase) return;
-    
-    setIsAddingTv(true);
-    setAddTvError('');
-    
-    try {
-      const code = newTvCode.trim().toUpperCase();
-      const { data: session, error: fetchError } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('id', code)
-        .single();
-
-      if (fetchError || !session) {
-        setAddTvError('Código inválido ou expirado.');
-        setIsAddingTv(false);
-        return;
-      }
-
-      // Check tier
-      const { data: settings } = await supabase
-        .from('dojo_settings')
-        .select('subscription_tier')
-        .eq('teacher_id', teacherId)
-        .single();
-        
-      const isBiz = settings?.subscription_tier === 'BUSINESS';
-
-      if (!isBiz) {
-        // Unpair any existing sessions for this teacher if not Business
-        await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('teacher_id', teacherId);
-      } else {
-        const { count } = await supabase
-          .from('sessions')
-          .select('*', { count: 'exact', head: true })
-          .eq('teacher_id', teacherId)
-          .eq('status', 'paired');
-          
-        if (count !== null && count >= 3) {
-          setAddTvError('Limite de 3 TVs simultâneas atingido no plano BUSINESS.');
-          setIsAddingTv(false);
-          return;
-        }
-      }
-
-      const { error: updateError } = await supabase
-        .from('sessions')
-        .update({ status: 'paired', teacher_id: teacherId, tv_name: isBiz ? `TV ${tvSessions.length + 1}` : 'TV Principal' })
-        .eq('id', code);
-
-      if (updateError) {
-        setAddTvError(`Erro ao conectar: ${updateError.message}`);
-        setIsAddingTv(false);
-        return;
-      }
-
-      setNewTvCode('');
-      setShowAddTv(false);
-      setActiveTvId(code); // Switch to the new TV
-    } catch (err) {
-      setAddTvError('Erro inesperado ao conectar.');
-    }
-    setIsAddingTv(false);
-  };
-
-  const updateVolume = (val: number) => {
-    setVolume(val);
-    handleCommand('SET_VOLUME', val);
-  };
-
-  const addSchedule = async () => {
-    if (!supabase) return;
-    if (!newSchedule.playlist_id) return alert('Selecione uma playlist!');
-    if (newSchedule.days_of_week.length === 0) return alert('Selecione pelo menos um dia!');
-    
-    const payloads = newSchedule.days_of_week.map(day => ({
-      teacher_id: teacherId,
-      playlist_id: newSchedule.playlist_id,
-      day_of_week: day,
-      start_time: newSchedule.start_time,
-      end_time: newSchedule.end_time
-    }));
-
-    const { data, error } = await supabase
-      .from('schedules')
-      .insert(payloads)
-      .select('*');
-
-    if (data) {
-      setSchedules([...schedules, ...data]);
-      setShowAddSchedule(false);
-      setNewSchedule(prev => ({ ...prev, playlist_id: '', days_of_week: [new Date().getDay()] }));
-    }
-    if (error) console.error(error);
-  };
-
-  const deleteSchedule = async (id: string) => {
-    if (!supabase) return;
-    await supabase.from('schedules').delete().eq('id', id);
-    setSchedules(schedules.filter(s => s.id !== id));
-  };
-
-  const deleteMedia = async (id: string, url: string) => {
-    if (!supabase) return;
-    try {
-      const path = url.split('dojo-media/')[1];
-      await supabase.storage.from('dojo-media').remove([path]);
-      await supabase.from('media').delete().eq('id', id);
-      setMediaList(mediaList.filter(m => m.id !== id));
-    } catch (error) {
-      console.error('Delete failed:', error);
-    }
-  };
-
-  const toggleTTS = async (val: boolean) => {
-    const newConfig = { ...localConfig, useTTS: val };
-    setLocalConfig(newConfig);
-    if (!supabase) return;
-    await supabase.from('dojo_settings').upsert({ teacher_id: teacherId, timer_config: newConfig, updated_at: new Date().toISOString() });
-    handleCommand('SETTINGS_UPDATE', { ...dojoSettings, timer_config: newConfig });
-  };
-
-  const removeAudio = async (field: string) => {
-    const newConfig = { ...localConfig, [field]: '' };
-    setLocalConfig(newConfig);
-    if (!supabase) return;
-    await supabase.from('dojo_settings').upsert({ teacher_id: teacherId, timer_config: newConfig, updated_at: new Date().toISOString() });
-    handleCommand('SETTINGS_UPDATE', { ...dojoSettings, timer_config: newConfig });
-  };
 
   if (showPresetManager) {
     return (
@@ -1115,6 +593,20 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
             handleCommand={handleCommand}
             activeSubTab={activeSubTab}
             setActiveSubTab={setActiveSubTab}
+            mediaList={mediaList}
+            setMediaList={setMediaList}
+            schedules={schedules}
+            isUploading={isUploading}
+            handleFileUpload={handleFileUpload}
+            deleteMedia={deleteMedia}
+            addSchedule={addSchedule}
+            deleteSchedule={deleteSchedule}
+            tickerConfig={tickerConfig}
+            sponsorsConfig={sponsorsConfig}
+            updateTickerConfig={updateTickerConfig}
+            updateSponsorsConfig={updateSponsorsConfig}
+            updatePlaylists={updatePlaylists}
+            handleConfigChange={handleConfigChange}
           />
         )}
 
