@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, Search, Edit2, Check, X, Loader2, Lock, Mail } from 'lucide-react';
+import { Shield, Search, Edit2, Check, X, Loader2, Lock, Mail, BarChart3 } from 'lucide-react';
 import GlobalMediaManager from './GlobalMediaManager';
+import AdminReports from './AdminReports';
 
 export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -16,7 +17,7 @@ export default function AdminPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTier, setEditTier] = useState<string>('');
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'USERS' | 'MEDIA'>('USERS');
+  const [activeTab, setActiveTab] = useState<'USERS' | 'MEDIA' | 'REPORTS'>('USERS');
 
   useEffect(() => {
     checkSession();
@@ -225,7 +226,16 @@ WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
           >
             Gestão de Mídias Globais
           </button>
+          <button 
+            onClick={() => setActiveTab('REPORTS')}
+            className={`px-6 py-3 rounded-xl font-bold transition-colors flex items-center gap-2 ${activeTab === 'REPORTS' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            <BarChart3 size={18} />
+            Relatórios
+          </button>
         </div>
+
+        {activeTab === 'REPORTS' && <AdminReports />}
 
         {activeTab === 'USERS' && (
           <>

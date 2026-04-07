@@ -1,0 +1,145 @@
+24:const getYouTubeEmbedUrl = (url: string) => {
+25:  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+26:  const match = url.match(regExp);
+31:  const [activeTvId, setActiveTvId] = useState<string>(initialPairingCode);
+32:  const [tvSessions, setTvSessions] = useState<any[]>([]);
+33:  const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB' | 'PLAN'>('TIMER');
+34:  const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
+35:  const [planSubTab, setPlanSubTab] = useState<'INFO' | 'REPORTS'>('INFO');
+36:  const [scoreboardConfig, setScoreboardConfig] = useState({
+41:  const [tickerConfig, setTickerConfig] = useState({
+45:  const [sponsorsConfig, setSponsorsConfig] = useState({
+52:  const [localConfig, setLocalConfig] = useState({
+70:  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+71:  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+72:  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
+73:  const [dojoForm, setDojoForm] = useState({ name: '', city: '', state: '' });
+74:  const [isUploading, setIsUploading] = useState(false);
+75:  const [showAddSchedule, setShowAddSchedule] = useState(false);
+76:  const [showPresetManager, setShowPresetManager] = useState(false);
+77:  const [editingPreset, setEditingPreset] = useState<TimerPreset | null>(null);
+78:  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
+79:  const [mediaUrlInput, setMediaUrlInput] = useState('');
+80:  const [mediaSponsorInput, setMediaSponsorInput] = useState('');
+81:  const [showUrlInput, setShowUrlInput] = useState(false);
+82:  const [showVolumePopup, setShowVolumePopup] = useState(false);
+83:  const [isMuted, setIsMuted] = useState(true);
+84:  const [volume, setVolume] = useState(50);
+85:  const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
+86:  const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+87:  const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
+88:  const isBusiness = ['BUSINESS'].includes(tier);
+89:  const [newSchedule, setNewSchedule] = useState({
+95:  const fileInputRef = useRef<HTMLInputElement>(null);
+96:  const logoInputRef = useRef<HTMLInputElement>(null);
+97:  const prepAudioRef = useRef<HTMLInputElement>(null);
+98:  const workAudioRef = useRef<HTMLInputElement>(null);
+99:  const restAudioRef = useRef<HTMLInputElement>(null);
+103:    const fetchData = async () => {
+106:      const { data: mediaData } = await supabase
+112:      const { data: scheduleData } = await supabase
+117:      const { data: settingsData } = await supabase
+123:      const { data: globalSettingsData } = await supabase
+134:      const mergedSettings = {
+174:  const [showTvManager, setShowTvManager] = useState(false);
+175:  const [showAddTv, setShowAddTv] = useState(false);
+176:  const [newTvCode, setNewTvCode] = useState('');
+177:  const [addTvError, setAddTvError] = useState('');
+178:  const [isAddingTv, setIsAddingTv] = useState(false);
+179:  const [isScanning, setIsScanning] = useState(false);
+180:  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+181:  const [disconnectedId, setDisconnectedId] = useState<string | null>(null);
+185:      const scanner = new Html5QrcodeScanner(
+195:            const url = new URL(decodedText);
+196:            const code = url.searchParams.get('code');
+231:    const fetchSessions = async () => {
+232:      const { data } = await supabase
+241:    const channel = supabase.channel(`tv-sessions-remote-${teacherId}-${Math.random()}`)
+255:  const handleCommand = (type: string, payload?: any) => {
+262:  const updateConfig = async (field: string, value: number) => {
+263:    const newConfig = { ...localConfig, [field]: value };
+272:  const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category', value: string) => {
+273:    const newConfig = { ...scoreboardConfig, [field]: value };
+290:  const updateTickerConfig = async (field: 'text' | 'active', value: string | boolean) => {
+291:    const newConfig = { ...tickerConfig, [field]: value };
+300:  const updateSponsorsConfig = async (field: keyof typeof sponsorsConfig, value: any) => {
+301:    const newConfig = { ...sponsorsConfig, [field]: value };
+310:  const updatePlaylists = async (newPlaylists: Playlist[]) => {
+311:    const newSettings = { ...dojoSettings, playlists: newPlaylists };
+318:  const updateTvPlaylist = async (tvId: string, playlistId: string) => {
+319:    const newTvPlaylists = { ...(dojoSettings.tv_playlists || {}), [tvId]: playlistId };
+320:    const newSettings = { ...dojoSettings, tv_playlists: newTvPlaylists };
+327:  const handleConfigChange = async (newSettings: Partial<typeof localConfig>) => {
+328:    const newConfig = { ...localConfig, ...newSettings };
+337:  const updateLabel = async (field: string, value: string) => {
+338:    const newConfig = { ...localConfig, [field]: value };
+347:  const defaultPresets: TimerPreset[] = [
+354:  const activePresets = dojoSettings.presets || defaultPresets;
+356:  const savePreset = async (preset: TimerPreset) => {
+360:    const existingIndex = newPresets.findIndex(p => p.id === preset.id);
+368:    const newSettings = { ...dojoSettings, presets: newPresets };
+376:  const deletePreset = async (id: string) => {
+379:    const newPresets = activePresets.filter(p => p.id !== id);
+380:    const newSettings = { ...dojoSettings, presets: newPresets };
+386:  const updateColor = async (field: string, value: string) => {
+387:    const newConfig = { ...localConfig, [field]: value };
+396:  const handleAddMediaUrl = async () => {
+399:    const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
+400:    const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
+401:    const type = isVideo ? 'video' : 'image';
+403:    const currentImages = mediaList.filter(m => m.type === 'image').length;
+404:    const currentVideos = mediaList.filter(m => m.type === 'video').length;
+422:      const { data: mediaData, error: dbError } = await supabase
+447:  const checkVideoDuration = (file: File): Promise<number> => {
+449:      const video = document.createElement('video');
+460:  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, mode: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST' = 'MEDIA') => {
+461:    const file = e.target.files?.[0];
+465:      const type = file.type.startsWith('video') ? 'video' : 'image';
+466:      const currentImages = mediaList.filter(m => m.type === 'image').length;
+467:      const currentVideos = mediaList.filter(m => m.type === 'video').length;
+473:          const duration = await checkVideoDuration(file);
+489:      const fileExt = file.name.split('.').pop();
+490:      const fileName = `${Math.random()}.${fileExt}`;
+491:      const filePath = `${teacherId}/${mode.toLowerCase()}_${fileName}`;
+493:      const { error: uploadError } = await supabase.storage
+506:      const { data: { publicUrl } } = supabase.storage
+511:        const { error: dbError } = await supabase
+522:        const field = mode === 'PREP' ? 'prepAudioUrl' : mode === 'WORK' ? 'workAudioUrl' : 'restAudioUrl';
+523:        const newConfig = { ...localConfig, [field]: publicUrl };
+526:        const { error: dbError } = await supabase
+536:        const type = file.type.startsWith('video') ? 'video' : 'image';
+537:        const { data: mediaData, error: dbError } = await supabase
+561:  const saveDojoConfig = async (e: React.FormEvent) => {
+570:    const { error } = await supabase
+589:  const toggleMute = () => {
+590:    const newMuted = !isMuted;
+595:  const handleAddTv = async (e: React.FormEvent) => {
+603:      const code = newTvCode.trim().toUpperCase();
+604:      const { data: session, error: fetchError } = await supabase
+617:      const { data: settings } = await supabase
+623:      const isBiz = settings?.subscription_tier === 'BUSINESS';
+629:        const { count } = await supabase
+642:      const { error: updateError } = await supabase
+662:  const updateVolume = (val: number) => {
+667:  const addSchedule = async () => {
+672:    const payloads = newSchedule.days_of_week.map(day => ({
+680:    const { data, error } = await supabase
+693:  const deleteSchedule = async (id: string) => {
+699:  const deleteMedia = async (id: string, url: string) => {
+702:      const path = url.split('dojo-media/')[1];
+711:  const toggleTTS = async (val: boolean) => {
+712:    const newConfig = { ...localConfig, useTTS: val };
+719:  const removeAudio = async (field: string) => {
+720:    const newConfig = { ...localConfig, [field]: '' };
+1130:                  const getStep = (field: string) => {
+1135:                  const getMin = (field: string) => {
+1140:                  const step = getStep(item.field);
+1141:                  const min = getMin(item.field);
+1142:                  const currentValue = (localConfig as any)[item.field];
+1483:                  const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+1585:                          const days = newSchedule.days_of_week || [];
+1632:                const playlist = dojoSettings.playlists?.find(p => p.id === s.playlist_id);
+1723:                                const newIds = prev.media_ids.includes(m.id) 
+1745:                          const newPlaylists = (dojoSettings.playlists || []).filter(p => p.id !== editingPlaylist.id);
+1755:                          const exists = (dojoSettings.playlists || []).find(p => p.id === editingPlaylist.id);
+1756:                          const newPlaylists = exists 

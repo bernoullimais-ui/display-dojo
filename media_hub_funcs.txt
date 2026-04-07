@@ -1,0 +1,67 @@
+  const handleAddMediaUrl = async () => {
+    if (!mediaUrlInput || !supabase) return;
+    
+    const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
+    const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
+    const type = isVideo ? 'video' : 'image';
+    
+    const currentImages = mediaList.filter(m => m.type === 'image').length;
+    const currentVideos = mediaList.filter(m => m.type === 'video').length;
+
+    if (type === 'video') {
+      if (!isPro) return alert('Adição de vídeos disponível a partir do plano PRÓ.');
+      if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
+    } else {
+      if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
+      if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
+    }
+
+    setIsUploading(true);
+    try {
+      let name = mediaUrlInput.split('/').pop()?.split('?')[0] || 'Mídia via URL';
+      
+      if (isYouTube) {
+        name = 'Vídeo do YouTube';
+      }
+
+      const { data: mediaData, error: dbError } = await supabase
+        .from('media')
+        .insert([{
+          teacher_id: teacherId,
+          name: name,
+          url: mediaUrlInput,
+          type: type,
+          sponsor_name: mediaSponsorInput || null
+        }])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+      setMediaList([mediaData, ...mediaList]);
+      setMediaUrlInput('');
+      setMediaSponsorInput('');
+      setShowUrlInput(false);
+    } catch (error: any) {
+      console.error('URL add failed:', error);
+      alert('Falha ao adicionar URL: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
