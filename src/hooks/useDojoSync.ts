@@ -159,12 +159,14 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     updateConfig('useTTS', val);
   };
 
-  const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category', value: string) => {
+  const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category' | 'sport', value: string) => {
     const newConfig = { ...scoreboardConfig, [field]: value };
     setScoreboardConfig(newConfig);
     
     if (field === 'category') {
       handleCommand('SCOREBOARD_SET_CATEGORY', value);
+    } else if (field === 'sport') {
+      handleCommand('SCOREBOARD_SET_SPORT', value);
     } else {
       handleCommand('SCOREBOARD_SET_NAMES', { 
         blue: field === 'blueName' ? value : scoreboardConfig.blueName,

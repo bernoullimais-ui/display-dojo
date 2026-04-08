@@ -39,7 +39,8 @@ export default function App() {
   const [scoreboardConfig, setScoreboardConfig] = useState({
     blueName: 'AZUL',
     whiteName: 'BRANCO',
-    category: ''
+    category: '',
+    sport: 'judo' as 'judo' | 'jiujitsu' | 'karate'
   });
 
   const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
@@ -61,6 +62,57 @@ export default function App() {
   const [isFullscreenMedia, setIsFullscreenMedia] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  useEffect(() => {
+    const handleInteraction = () => {
+      setHasInteracted(true);
+      if (viewMode === 'TV') {
+        setIsMuted(false);
+      }
+    };
+    window.addEventListener('click', handleInteraction);
+    window.addEventListener('touchstart', handleInteraction);
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('touchstart', handleInteraction);
+    };
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'TV') return;
+
+    let videoElement: HTMLVideoElement | null = null;
+
+    const enableWakeLock = () => {
+      if (!videoElement) {
+        videoElement = document.createElement('video');
+        videoElement.setAttribute('loop', '');
+        videoElement.setAttribute('muted', '');
+        videoElement.setAttribute('playsinline', '');
+        // 1x1 transparent MP4 (known good base64 from nosleep.js)
+        videoElement.src = 'data:video/mp4;base64,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';
+        videoElement.play().then(() => {
+          console.log('Video wake lock enabled');
+        }).catch((err) => {
+          console.error('Video wake lock error:', err);
+        });
+      }
+    };
+
+    document.addEventListener('click', enableWakeLock);
+    document.addEventListener('touchstart', enableWakeLock);
+
+    return () => {
+      document.removeEventListener('click', enableWakeLock);
+      document.removeEventListener('touchstart', enableWakeLock);
+      if (videoElement) {
+        videoElement.pause();
+        videoElement.src = '';
+        videoElement = null;
+      }
+    };
+  }, [viewMode]);
 
   useEffect(() => {
     if (!supabase) {
@@ -185,25 +237,26 @@ export default function App() {
       if (payload.new.last_command) {
         const cmd = payload.new.last_command;
         setRemoteCommand(cmd);
-        if (cmd.type === 'START') {
+        if (cmd.type === 'START' || cmd.type === 'PAUSE' || cmd.type === 'RESET' || cmd.type === 'CONFIG_UPDATE') {
           setIsTimerActive(true);
           setIsScoreboardActive(false);
+          setActiveMedia(null);
+          setActiveManualPlaylist(null);
         }
         if (cmd.type === 'HIDE_TIMER') {
           setIsTimerActive(false);
-        }
-        if (cmd.type === 'RESET') {
-          setActiveMedia(null);
         }
         if (cmd.type === 'SHOW_MEDIA') {
           setActiveMedia(cmd.payload);
           setActiveManualPlaylist(null);
           setIsScoreboardActive(false);
+          setIsTimerActive(false);
         }
         if (cmd.type === 'SHOW_PLAYLIST') {
           setActiveManualPlaylist(cmd.payload);
           setActiveMedia(null);
           setIsScoreboardActive(false);
+          setIsTimerActive(false);
         }
         if (cmd.type === 'TOGGLE_FULLSCREEN') {
           setIsFullscreenMedia(prev => !prev);
@@ -216,6 +269,7 @@ export default function App() {
           setIsScoreboardActive(true);
           setIsTimerActive(false);
           setActiveMedia(null);
+          setActiveManualPlaylist(null);
         }
         if (cmd.type === 'HIDE_SCOREBOARD') setIsScoreboardActive(false);
         if (cmd.type === 'SETTINGS_UPDATE') setDojoSettings(cmd.payload);
@@ -231,6 +285,9 @@ export default function App() {
         }
         if (cmd.type === 'SCOREBOARD_SET_CATEGORY') {
           setScoreboardConfig(prev => ({ ...prev, category: cmd.payload }));
+        }
+        if (cmd.type === 'SCOREBOARD_SET_SPORT') {
+          setScoreboardConfig(prev => ({ ...prev, sport: cmd.payload }));
         }
         if (cmd.type === 'TICKER_UPDATE') {
           setTickerConfig(cmd.payload);
@@ -285,7 +342,7 @@ export default function App() {
 
   // Logic to find current scheduled media
   const activeSchedules = useMemo(() => {
-    if (isTimerActive || activeMedia || activeManualPlaylist) return []; // Priority: Timer > Manual Media/Playlist > Schedule
+    if (isTimerActive || isScoreboardActive || activeMedia || activeManualPlaylist) return []; // Priority: Manual Media/Playlist/Timer/Scoreboard > Schedule
 
     const currentDay = currentClock.getDay();
     const h = currentClock.getHours();
@@ -417,7 +474,7 @@ export default function App() {
           onEnded={() => {
             if (!shouldLoop) setScheduleIndex(prev => prev + 1);
           }}
-          className="w-full h-full object-cover" 
+          className="w-full h-full object-contain" 
         />
       );
     }
@@ -466,7 +523,17 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen w-screen bg-black text-white flex flex-col items-center justify-center overflow-hidden">
+    <div className="h-screen w-screen bg-black text-white flex flex-col items-center justify-center overflow-hidden relative">
+      {!hasInteracted && viewMode === 'TV' && (
+        <div className="absolute inset-0 z-[200] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center cursor-pointer" onClick={() => {
+          setHasInteracted(true);
+          setIsMuted(false);
+        }}>
+          <Volume2 size={64} className="text-white mb-4 animate-pulse" />
+          <h2 className="text-3xl font-bold text-white mb-2">Clique para habilitar o áudio</h2>
+          <p className="text-zinc-400">O navegador exige uma interação para reproduzir sons.</p>
+        </div>
+      )}
       <AnimatePresence mode="wait">
         {showSplash ? (
           <motion.div
@@ -514,10 +581,15 @@ export default function App() {
                 {/* Status Bar */}
                 {!isFullscreenMedia && (
                   <div className="fixed top-0 left-0 w-full p-[3vmin] flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent z-50 pointer-events-none">
-                    <div className="flex items-center gap-[2vw] pointer-events-auto">
+                    <div className="flex items-center gap-[2vw] pointer-events-auto w-1/3">
                       <DigitalClock />
                     </div>
-                    <div className="flex items-center gap-[2vw] pointer-events-auto">
+                    <div className="flex items-center justify-center w-1/3 pointer-events-none">
+                      <span className="text-zinc-400 font-bold uppercase tracking-widest text-[2vmin] text-center drop-shadow-lg">
+                        DOJO TV ({dojoSettings.name})
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-end gap-[2vw] pointer-events-auto w-1/3">
                       <button 
                         onClick={() => setViewMode('REMOTE')} 
                         className="flex items-center gap-[1vw] hover:bg-zinc-900/50 px-[2vw] py-[1vh] rounded-full transition-colors group border border-transparent hover:border-zinc-800"
@@ -540,13 +612,16 @@ export default function App() {
                         blueName={scoreboardConfig.blueName}
                         whiteName={scoreboardConfig.whiteName}
                         category={scoreboardConfig.category}
+                        sport={scoreboardConfig.sport}
                         isFreePlan={!isStarter || sponsorsConfig.scoreboard_active}
                         globalSponsors={isStarter && sponsorsConfig.scoreboard_active ? scoreboardSponsors : (dojoSettings.scoreboard_config?.free_sponsors || [])}
                         globalSponsorInterval={isStarter && sponsorsConfig.scoreboard_active ? sponsorsConfig.interval : (dojoSettings.scoreboard_config?.free_sponsor_interval || 15)}
+                        isMuted={isMuted}
+                        volume={volume}
                       />
                     </div>
                   ) : isTimerActive ? (
-                    <div className={`w-full h-full flex items-center justify-center ${activeMedia ? 'grid grid-cols-2 gap-12' : ''}`}>
+                    <div className="w-full h-full flex items-center justify-center">
                       <TabataTimer 
                         externalCommand={remoteCommand} 
                         isMuted={isMuted} 
@@ -556,11 +631,6 @@ export default function App() {
                         globalSponsors={isStarter && sponsorsConfig.timer_active ? timerSponsors : (dojoSettings.timer_config?.free_sponsors || [])}
                         globalSponsorInterval={isStarter && sponsorsConfig.timer_active ? sponsorsConfig.interval : (dojoSettings.timer_config?.free_sponsor_interval || 15)}
                       />
-                      {activeMedia && (
-                        <div className={`relative bg-zinc-900 overflow-hidden shadow-2xl ${isFullscreenMedia ? 'w-full h-full fixed inset-0 z-50 rounded-none border-0' : 'w-full h-full rounded-3xl border border-zinc-800'}`}>
-                          {renderMedia(activeMedia, false)}
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -597,10 +667,6 @@ export default function App() {
                       )}
                     </div>
                   )}
-                </div>
-
-                <div className={`fixed bottom-0 left-0 w-full p-8 flex justify-center opacity-10 pointer-events-none ${((isScoreboardActive && (!isStarter || sponsorsConfig.scoreboard_active)) || (isTimerActive && (!isStarter || sponsorsConfig.timer_active))) ? 'px-[15vw]' : ''}`}>
-                  <span className="text-9xl font-black tracking-tighter select-none uppercase text-center truncate">{dojoSettings.name}</span>
                 </div>
               </>
             )}

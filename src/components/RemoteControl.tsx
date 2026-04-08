@@ -79,7 +79,7 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
   const {
     mediaList, setMediaList,
     schedules, setSchedules,
-    isUploading, handleFileUpload,
+    isUploading, setIsUploading, handleFileUpload,
     deleteMedia, addSchedule, deleteSchedule
   } = useMediaManager(teacherId, isPro, isBusiness);
 
@@ -114,16 +114,16 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
   const toggleMute = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    handleCommand('AUDIO_MUTE', newMuted);
+    handleCommand('TOGGLE_MUTE', newMuted);
   };
 
   const updateVolume = (val: number) => {
     setVolume(val);
     if (isMuted && val > 0) {
       setIsMuted(false);
-      handleCommand('AUDIO_MUTE', false);
+      handleCommand('TOGGLE_MUTE', false);
     }
-    handleCommand('AUDIO_VOLUME', val);
+    handleCommand('SET_VOLUME', val);
   };
 
 const fileInputRef = useRef<HTMLInputElement>(null);
@@ -304,6 +304,12 @@ const fileInputRef = useRef<HTMLInputElement>(null);
           <span className="font-bold tracking-tighter text-center">DOJO REMOTE ({dojoSettings.name})</span>
         </div>
         <div className="flex items-center justify-center gap-3 flex-wrap w-full">
+          <button onClick={() => setShowTvManager(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
+            <Tv size={16} /> TVs
+          </button>
+          <button onClick={() => setShowAddTv(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
+            <PlusCircle size={16} /> Incluir TV
+          </button>
           <div className="relative">
             <button 
               onClick={() => setShowVolumePopup(!showVolumePopup)}
@@ -341,12 +347,6 @@ const fileInputRef = useRef<HTMLInputElement>(null);
               </>
             )}
           </div>
-          <button onClick={() => setShowTvManager(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
-            <Tv size={16} /> TVs
-          </button>
-          <button onClick={() => setShowAddTv(true)} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-white">
-            <PlusCircle size={16} /> Incluir TV
-          </button>
           <button onClick={async () => {
             if (supabase) {
               await supabase.auth.signOut();
@@ -597,6 +597,7 @@ const fileInputRef = useRef<HTMLInputElement>(null);
             setMediaList={setMediaList}
             schedules={schedules}
             isUploading={isUploading}
+            setIsUploading={setIsUploading}
             handleFileUpload={handleFileUpload}
             deleteMedia={deleteMedia}
             addSchedule={addSchedule}

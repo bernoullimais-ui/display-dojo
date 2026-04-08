@@ -47,86 +47,119 @@ export function useMediaManager(teacherId: string, isPro: boolean, isBusiness: b
     mode: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST' = 'MEDIA',
     onLogoUpload?: (url: string) => void,
     onAudioUpload?: (mode: string, url: string) => void,
-    sponsorName?: string
+    sponsorName?: string,
+    folderName?: string | null
   ) => {
-    const file = e.target.files?.[0];
-    if (!file || !supabase) return;
-
-    if (mode === 'MEDIA') {
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      const currentImages = mediaList.filter(m => m.type === 'image').length;
-      const currentVideos = mediaList.filter(m => m.type === 'video').length;
-
-      if (type === 'video') {
-        if (!isPro) return alert('Upload de vídeos disponível a partir do plano PRÓ.');
-        
-        try {
-          const duration = await checkVideoDuration(file);
-          if (!isBusiness && duration > 15) return alert('No plano PRÓ, vídeos podem ter no máximo 15 segundos.');
-          if (isBusiness && duration > 30) return alert('No plano BUSINESS, vídeos podem ter no máximo 30 segundos.');
-        } catch (e) {
-          return alert('Não foi possível verificar a duração do vídeo.');
-        }
-
-        if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
-      } else {
-        if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
-        if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
-      }
-    }
+    const files = Array.from(e.target.files || []) as File[];
+    if (files.length === 0 || !supabase) return;
 
     setIsUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${teacherId}/${mode.toLowerCase()}_${fileName}`;
+    
+    let currentImages = mediaList.filter(m => m.type === 'image').length;
+    let currentVideos = mediaList.filter(m => m.type === 'video').length;
+    const newMediaItems: MediaItem[] = [];
 
-      const { error: uploadError } = await supabase.storage
-        .from('dojo-media')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        if (uploadError.message.includes('bucket not found') || uploadError.message.includes('Bucket not found')) {
-          alert('ERRO: O bucket "dojo-media" não foi encontrado no seu Supabase.');
-        } else {
-          throw uploadError;
-        }
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('dojo-media')
-        .getPublicUrl(filePath);
-
-      if (mode === 'LOGO') {
-        if (onLogoUpload) onLogoUpload(publicUrl);
-      } else if (['PREP', 'WORK', 'REST'].includes(mode)) {
-        if (onAudioUpload) onAudioUpload(mode, publicUrl);
-      } else {
+    for (const file of files) {
+      if (mode === 'MEDIA') {
         const type = file.type.startsWith('video') ? 'video' : 'image';
-        const { data: mediaData, error: dbError } = await supabase
-          .from('media')
-          .insert({
-            teacher_id: teacherId,
-            url: publicUrl,
-            type,
-            name: file.name,
-            sponsor_name: sponsorName || null
-          })
-          .select()
-          .single();
 
-        if (dbError) throw dbError;
-        if (mediaData) {
-          setMediaList([mediaData, ...mediaList]);
+        if (type === 'video') {
+          if (!isPro) {
+            alert(`Upload de vídeos disponível a partir do plano PRÓ. Arquivo ${file.name} ignorado.`);
+            continue;
+          }
+          
+          try {
+            const duration = await checkVideoDuration(file);
+            if (!isBusiness && duration > 15) {
+              alert(`No plano PRÓ, vídeos podem ter no máximo 15 segundos. Arquivo ${file.name} ignorado.`);
+              continue;
+            }
+            if (isBusiness && duration > 30) {
+              alert(`No plano BUSINESS, vídeos podem ter no máximo 30 segundos. Arquivo ${file.name} ignorado.`);
+              continue;
+            }
+          } catch (e) {
+            alert(`Não foi possível verificar a duração do vídeo ${file.name}.`);
+            continue;
+          }
+
+          if (!isBusiness && currentVideos >= 2) {
+            alert(`Limite de 2 vídeos atingido no plano PRÓ. Arquivo ${file.name} ignorado.`);
+            continue;
+          }
+          currentVideos++;
+        } else {
+          if (!isPro && currentImages >= 3) {
+            alert(`Limite de 3 imagens atingido no plano STARTER. Arquivo ${file.name} ignorado.`);
+            continue;
+          }
+          if (isPro && !isBusiness && currentImages >= 6) {
+            alert(`Limite de 6 imagens atingido no plano PRÓ. Arquivo ${file.name} ignorado.`);
+            continue;
+          }
+          currentImages++;
         }
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Erro ao fazer upload do arquivo.');
-    } finally {
-      setIsUploading(false);
+
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${teacherId}/${mode.toLowerCase()}_${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('dojo-media')
+          .upload(filePath, file);
+
+        if (uploadError) {
+          if (uploadError.message.includes('bucket not found') || uploadError.message.includes('Bucket not found')) {
+            alert('ERRO: O bucket "dojo-media" não foi encontrado no seu Supabase.');
+            break;
+          } else {
+            throw uploadError;
+          }
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('dojo-media')
+          .getPublicUrl(filePath);
+
+        if (mode === 'LOGO') {
+          if (onLogoUpload) onLogoUpload(publicUrl);
+        } else if (['PREP', 'WORK', 'REST'].includes(mode)) {
+          if (onAudioUpload) onAudioUpload(mode, publicUrl);
+        } else {
+          const type = file.type.startsWith('video') ? 'video' : 'image';
+          const { data: mediaData, error: dbError } = await supabase
+            .from('media')
+            .insert({
+              teacher_id: teacherId,
+              url: publicUrl,
+              type,
+              name: folderName ? `${folderName}/${file.name}` : file.name,
+              sponsor_name: sponsorName || null
+            })
+            .select()
+            .single();
+
+          if (dbError) throw dbError;
+          if (mediaData) {
+            newMediaItems.push(mediaData);
+          }
+        }
+      } catch (error) {
+        console.error(`Upload failed for ${file.name}:`, error);
+        alert(`Erro ao fazer upload do arquivo ${file.name}.`);
+      }
     }
+
+    if (newMediaItems.length > 0) {
+      setMediaList(prev => [...newMediaItems, ...prev]);
+    }
+    setIsUploading(false);
+    
+    // Reset input value to allow uploading the same file(s) again
+    e.target.value = '';
   };
 
   const deleteMedia = async (id: string, url: string) => {
@@ -176,6 +209,7 @@ export function useMediaManager(teacherId: string, isPro: boolean, isBusiness: b
     schedules,
     setSchedules,
     isUploading,
+    setIsUploading,
     handleFileUpload,
     deleteMedia,
     addSchedule,

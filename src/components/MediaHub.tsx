@@ -18,7 +18,8 @@ interface MediaHubProps {
   setMediaList: React.Dispatch<React.SetStateAction<MediaItem[]>>;
   schedules: ScheduleItem[];
   isUploading: boolean;
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, mode?: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST', onLogoUpload?: (url: string) => void, onAudioUpload?: (mode: string, url: string) => void, sponsorName?: string) => Promise<void>;
+  setIsUploading: React.Dispatch<React.SetStateAction<boolean>>;
+  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, mode?: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST', onLogoUpload?: (url: string) => void, onAudioUpload?: (mode: string, url: string) => void, sponsorName?: string, folderName?: string | null) => Promise<void>;
   deleteMedia: (id: string, url: string) => Promise<void>;
   addSchedule: (schedule: any) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
@@ -44,6 +45,7 @@ export default function MediaHub({
   setMediaList,
   schedules,
   isUploading,
+  setIsUploading,
   handleFileUpload,
   deleteMedia,
   addSchedule,
@@ -67,6 +69,65 @@ export default function MediaHub({
     end_time: '10:00'
   });
   const [dojoForm, setDojoForm] = useState({ name: dojoSettings.name || '', city: dojoSettings.city || '', state: dojoSettings.state || '' });
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+  const [showAddFolder, setShowAddFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  const folders = Array.from(new Set([
+    ...(dojoSettings.media_folders || []),
+    ...mediaList.map(m => m.name.includes('/') ? m.name.split('/')[0] : null).filter(Boolean)
+  ])) as string[];
+
+  const currentFolderMedia = mediaList.filter(m => {
+    if (!currentFolder) return !m.name.includes('/');
+    return m.name.startsWith(currentFolder + '/');
+  });
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim() || !supabase) return;
+    const folderName = newFolderName.trim();
+    if (folders.includes(folderName)) {
+      alert('Pasta já existe!');
+      return;
+    }
+    
+    const newFolders = [...(dojoSettings.media_folders || []), folderName];
+    const { error } = await supabase
+      .from('dojo_settings')
+      .update({ media_folders: newFolders })
+      .eq('teacher_id', teacherId);
+      
+    if (error) {
+      console.error('Error creating folder:', error);
+      alert('Erro ao criar pasta: ' + error.message);
+    } else {
+      setDojoSettings(prev => ({ ...prev, media_folders: newFolders }));
+      setNewFolderName('');
+      setShowAddFolder(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folderName: string) => {
+    if (!supabase) return;
+    const folderMedia = mediaList.filter(m => m.name.startsWith(folderName + '/'));
+    if (folderMedia.length > 0) {
+      alert('A pasta não está vazia. Exclua as mídias primeiro.');
+      return;
+    }
+    
+    const newFolders = (dojoSettings.media_folders || []).filter(f => f !== folderName);
+    const { error } = await supabase
+      .from('dojo_settings')
+      .update({ media_folders: newFolders })
+      .eq('teacher_id', teacherId);
+      
+    if (error) {
+      alert('Erro ao excluir pasta.');
+    } else {
+      setDojoSettings(prev => ({ ...prev, media_folders: newFolders }));
+      if (currentFolder === folderName) setCurrentFolder(null);
+    }
+  };
 
   const saveDojoConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,6 +204,7 @@ export default function MediaHub({
   const handleAddMediaUrl = async () => {
     if (!mediaUrlInput || !supabase) return;
     
+    setIsUploading(true);
     const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
     const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
     const type = isVideo ? 'video' : 'image';
@@ -151,18 +213,44 @@ export default function MediaHub({
     const currentVideos = mediaList.filter(m => m.type === 'video').length;
 
     if (type === 'video') {
-      if (!isPro) return alert('Adição de vídeos disponível a partir do plano PRÓ.');
-      if (!isBusiness && currentVideos >= 2) return alert('Limite de 2 vídeos atingido no plano PRÓ.');
+      if (!isPro) {
+        setIsUploading(false);
+        return alert('Adição de vídeos disponível a partir do plano PRÓ.');
+      }
+      if (!isBusiness && currentVideos >= 2) {
+        setIsUploading(false);
+        return alert('Limite de 2 vídeos atingido no plano PRÓ.');
+      }
     } else {
-      if (!isPro && currentImages >= 3) return alert('Limite de 3 imagens atingido no plano STARTER.');
-      if (isPro && !isBusiness && currentImages >= 6) return alert('Limite de 6 imagens atingido no plano PRÓ.');
+      if (!isPro && currentImages >= 3) {
+        setIsUploading(false);
+        return alert('Limite de 3 imagens atingido no plano STARTER.');
+      }
+      if (isPro && !isBusiness && currentImages >= 6) {
+        setIsUploading(false);
+        return alert('Limite de 6 imagens atingido no plano PRÓ.');
+      }
     }
 
     try {
       let name = mediaUrlInput.split('/').pop()?.split('?')[0] || 'Mídia via URL';
       
       if (isYouTube) {
-        name = 'Vídeo do YouTube';
+        try {
+          const response = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(mediaUrlInput)}`);
+          const data = await response.json();
+          if (data.title) {
+            name = data.title;
+          } else {
+            name = 'Vídeo do YouTube';
+          }
+        } catch (e) {
+          name = 'Vídeo do YouTube';
+        }
+      }
+      
+      if (currentFolder) {
+        name = `${currentFolder}/${name}`;
       }
 
       const { data: mediaData, error: dbError } = await supabase
@@ -185,6 +273,8 @@ export default function MediaHub({
     } catch (error: any) {
       console.error('URL add failed:', error);
       alert('Falha ao adicionar URL: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -208,12 +298,12 @@ export default function MediaHub({
 
   return (
     <div className="space-y-6">
-            <div className="w-full flex overflow-x-auto bg-zinc-900/50 p-1 rounded-xl mb-4 hide-scrollbar">
-              <button onClick={() => setActiveSubTab('LIBRARY')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'LIBRARY' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Biblioteca</button>
-              <button onClick={() => setActiveSubTab('PLAYLISTS')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'PLAYLISTS' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Playlists</button>
-              <button onClick={() => setActiveSubTab('SCHEDULE')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'SCHEDULE' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Agenda</button>
-              <button onClick={() => setActiveSubTab('TICKER')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'TICKER' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Letreiro</button>
-              <button onClick={() => setActiveSubTab('DOJO')} className={`flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all ${activeSubTab === 'DOJO' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Dojo</button>
+            <div className="w-full grid grid-cols-5 bg-zinc-900/50 p-1 rounded-xl mb-4">
+              <button onClick={() => setActiveSubTab('LIBRARY')} className={`py-2 px-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest transition-all truncate ${activeSubTab === 'LIBRARY' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Biblio</button>
+              <button onClick={() => setActiveSubTab('PLAYLISTS')} className={`py-2 px-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest transition-all truncate ${activeSubTab === 'PLAYLISTS' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Listas</button>
+              <button onClick={() => setActiveSubTab('SCHEDULE')} className={`py-2 px-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest transition-all truncate ${activeSubTab === 'SCHEDULE' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Agenda</button>
+              <button onClick={() => setActiveSubTab('TICKER')} className={`py-2 px-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest transition-all truncate ${activeSubTab === 'TICKER' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Letreiro</button>
+              <button onClick={() => setActiveSubTab('DOJO')} className={`py-2 px-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest transition-all truncate ${activeSubTab === 'DOJO' ? 'bg-zinc-800 text-white rounded-lg' : 'text-zinc-500'}`}>Dojo</button>
             </div>
 
             {activeSubTab === 'LIBRARY' && (
@@ -245,7 +335,7 @@ export default function MediaHub({
                   {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
                 </button>
               </div>
-              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*" />
+              <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'MEDIA', undefined, undefined, undefined, currentFolder)} className="hidden" accept="image/*,video/*" multiple />
             </div>
 
             {!isStarter && (
@@ -298,37 +388,116 @@ export default function MediaHub({
             )}
 
             {isStarter && (
-              <div className="grid grid-cols-2 gap-4">
-                {mediaList.map((item) => {
-                  const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
-                  return (
-                    <div key={item.id} className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square">
-                      {item.type === 'image' ? (
-                        <img src={item.url} className="w-full h-full object-cover opacity-70" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-zinc-800 opacity-70">
-                          {isYouTube ? <Youtube className="text-red-600" size={40} /> : <Video className="text-zinc-600" size={40} />}
-                        </div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white/90 text-black p-4 rounded-full shadow-lg pointer-events-auto active:scale-95 transition-transform">
-                          <PlayCircle size={32} />
-                        </button>
-                      </div>
-                      {item.teacher_id !== 'GLOBAL' && (
-                        <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10">
-                          <Trash2 size={18} />
-                        </button>
-                      )}
-                      {item.sponsor_name && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-2 text-center">
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Patrocínio</p>
-                          <p className="text-xs font-bold text-white truncate">{item.sponsor_name}</p>
-                        </div>
-                      )}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2">
+                  <button 
+                    onClick={() => setCurrentFolder(null)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${!currentFolder ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+                  >
+                    Tudo
+                  </button>
+                  {folders.map(folder => (
+                    <div key={folder} className="flex items-center group">
+                      <button 
+                        onClick={() => setCurrentFolder(folder)}
+                        className={`px-4 py-2 rounded-l-xl text-xs font-bold whitespace-nowrap transition-colors ${currentFolder === folder ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+                      >
+                        {folder}
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteFolder(folder)}
+                        className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                  );
-                })}
+                  ))}
+                  <button 
+                    onClick={() => setShowAddFolder(true)}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-400 hover:bg-zinc-800 text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1"
+                  >
+                    <Plus size={14} /> Nova Pasta
+                  </button>
+                </div>
+
+                {showAddFolder && (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder="Nome da pasta"
+                      className="flex-1 bg-black border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                    <button 
+                      onClick={handleCreateFolder}
+                      disabled={!newFolderName.trim()}
+                      className="bg-blue-600 px-4 rounded-xl font-bold text-xs disabled:opacity-50"
+                    >
+                      Criar
+                    </button>
+                    <button 
+                      onClick={() => { setShowAddFolder(false); setNewFolderName(''); }}
+                      className="bg-zinc-800 px-4 rounded-xl font-bold text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  {currentFolderMedia.map((item) => {
+                    const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+                    const displayName = item.name.includes('/') ? item.name.split('/').pop() : item.name;
+                    
+                    let youtubeVideoId = null;
+                    if (isYouTube) {
+                      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                      const match = item.url.match(regExp);
+                      youtubeVideoId = (match && match[2].length === 11) ? match[2] : null;
+                    }
+
+                    return (
+                      <div key={item.id} className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square">
+                        {item.type === 'image' ? (
+                          <img src={item.url} className="w-full h-full object-cover opacity-70" />
+                        ) : isYouTube ? (
+                          <div className="w-full h-full relative bg-zinc-900 opacity-70">
+                            {youtubeVideoId ? (
+                              <img src={`https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`} className="w-full h-full object-cover" />
+                            ) : null}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Youtube className="text-red-600 drop-shadow-lg" size={40} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-zinc-800 opacity-70">
+                            <Video className="text-zinc-600" size={40} />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white/90 text-black p-4 rounded-full shadow-lg pointer-events-auto active:scale-95 transition-transform">
+                            <PlayCircle size={32} />
+                          </button>
+                        </div>
+                        {item.teacher_id !== 'GLOBAL' && (
+                          <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10">
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                        <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded-lg max-w-[70%]">
+                          <p className="text-[10px] font-bold text-white truncate">{displayName}</p>
+                        </div>
+                        {item.sponsor_name && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-2 text-center">
+                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Patrocínio</p>
+                            <p className="text-xs font-bold text-white truncate">{item.sponsor_name}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -506,12 +675,21 @@ export default function MediaHub({
                   <>
                 <div className="flex justify-between items-center">
                   <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Playlists</h3>
-                  <button 
-                    onClick={() => setEditingPlaylist({ id: Math.random().toString(), name: 'Nova Playlist', media_ids: [] })}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
-                  >
-                    <Plus size={16} /> CRIAR
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleCommand('STOP_MEDIA')} 
+                      className="p-2 rounded-full bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors"
+                      title="Interromper Playlist"
+                    >
+                      <XCircle size={20} />
+                    </button>
+                    <button 
+                      onClick={() => setEditingPlaylist({ id: Math.random().toString(), name: 'Nova Playlist', media_ids: [] })}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
+                    >
+                      <Plus size={16} /> CRIAR
+                    </button>
+                  </div>
                 </div>
 
                 {editingPlaylist ? (

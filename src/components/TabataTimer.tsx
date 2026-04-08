@@ -409,6 +409,12 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="w-full h-full flex relative">
       {/* Left Sponsor */}
@@ -424,9 +430,9 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
               className="w-full h-full"
             >
               {currentSponsor.type === 'video' ? (
-                <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-contain" />
               ) : (
-                <img src={currentSponsor.url} className="w-full h-full object-cover" />
+                <img src={currentSponsor.url} className="w-full h-full object-contain" />
               )}
             </motion.div>
           </AnimatePresence>
@@ -434,7 +440,7 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
       )}
 
       {/* Main Timer Area */}
-      <div className="flex-1 flex flex-col items-center justify-center h-full space-y-12">
+      <div className="flex-1 flex flex-col items-center justify-center h-full space-y-[8vh] z-10">
         {/* Phase Indicator */}
         <div className="text-center space-y-[2vh]">
           <motion.div
@@ -442,31 +448,31 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             style={{ color: getPhaseColor() }}
-            className="flex items-center justify-center gap-[2vw] text-[4vmin] font-black tracking-widest"
+            className="flex items-center justify-center gap-[2vw] text-[6vmin] font-black tracking-widest"
           >
             {getPhaseIcon()}
             <span>{getPhaseLabel()}</span>
           </motion.div>
           
-          <div className="text-zinc-500 text-[3vmin] font-medium">
+          <div className="text-zinc-500 text-[4vmin] font-medium">
             CICLO {currentCycle} / {config.cycles}
           </div>
 
           {/* Quick Info */}
-          <div className="flex justify-center gap-[4vw] text-zinc-500 text-[2vmin] font-medium pt-[2vh]">
+          <div className="flex justify-center gap-[4vw] text-zinc-500 text-[2.5vmin] font-medium pt-[3vh]">
             <div className="flex items-center gap-2">
-              <div className="text-zinc-600 text-sm">PREP</div>
-              <div>{config.prepTime}s</div>
+              <div className="text-zinc-600">PREP</div>
+              <div>{formatTime(config.prepTime)}</div>
             </div>
             <div className="text-zinc-700">•</div>
             <div className="flex items-center gap-2">
-              <div className="text-zinc-600 text-sm">WORK</div>
-              <div>{config.workTime}s</div>
+              <div className="text-zinc-600">WORK</div>
+              <div>{formatTime(config.workTime)}</div>
             </div>
             <div className="text-zinc-700">•</div>
             <div className="flex items-center gap-2">
-              <div className="text-zinc-600 text-sm">REST</div>
-              <div>{config.restTime}s</div>
+              <div className="text-zinc-600">REST</div>
+              <div>{formatTime(config.restTime)}</div>
             </div>
           </div>
         </div>
@@ -481,37 +487,14 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
               exit={{ y: -20, opacity: 0 }}
               transition={{ duration: 0.2 }}
               style={{ color: getPhaseColor() }}
-              className="text-[35vmin] font-mono font-black leading-none tabular-nums"
+              className="text-[35vmin] font-mono font-black leading-none tabular-nums px-[4vw] py-[2vh]"
             >
-              {timeLeft}
+              {formatTime(timeLeft)}
             </motion.div>
           </AnimatePresence>
           
           {/* Progress Ring (Visual only for now) */}
-          <div className="absolute inset-0 -m-20 border-[20px] border-zinc-900 rounded-full opacity-20" />
-        </div>
-
-        {/* Controls (For testing on TV, usually controlled via Smartphone) */}
-        <div className="flex items-center gap-12 pt-8">
-          <button
-            onClick={resetTimer}
-            className="p-6 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
-          >
-            <RotateCcw size={48} />
-          </button>
-          
-          <button
-            onClick={toggleTimer}
-            className={`p-10 rounded-full transition-all transform hover:scale-110 active:scale-95 shadow-2xl ${
-              isActive 
-                ? 'bg-zinc-800 text-white' 
-                : 'bg-blue-600 text-white hover:bg-blue-500'
-            }`}
-          >
-            {isActive ? <Pause size={80} fill="currentColor" /> : <Play size={80} fill="currentColor" className="ml-2" />}
-          </button>
-
-          <div className="w-[96px]" /> {/* Spacer to balance reset button */}
+          <div className="absolute inset-0 border-[10px] border-zinc-900 rounded-[10rem] opacity-20 pointer-events-none" />
         </div>
       </div>
 
@@ -528,9 +511,9 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
               className="w-full h-full"
             >
               {currentSponsor.type === 'video' ? (
-                <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-contain" />
               ) : (
-                <img src={currentSponsor.url} className="w-full h-full object-cover" />
+                <img src={currentSponsor.url} className="w-full h-full object-contain" />
               )}
             </motion.div>
           </AnimatePresence>

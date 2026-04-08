@@ -49,6 +49,7 @@ export interface DojoSettings {
     interval: number;
   };
   subscription_tier?: 'FREE' | 'STARTER' | 'PRO' | 'PREMIUM' | 'BUSINESS';
+  media_folders?: string[];
 }
 
 export interface ScheduleItem {
