@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { MediaItem, ScheduleItem } from '../types';
 
-export function useMediaManager(teacherId: string, isPro: boolean, isBusiness: boolean) {
+export function useMediaManager(teacherId: string, isStarter: boolean, isPro: boolean, isBusiness: boolean) {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -55,12 +55,16 @@ export function useMediaManager(teacherId: string, isPro: boolean, isBusiness: b
 
     setIsUploading(true);
     
-    let currentImages = mediaList.filter(m => m.type === 'image').length;
-    let currentVideos = mediaList.filter(m => m.type === 'video').length;
+    let currentImages = mediaList.filter(m => m.type === 'image' && m.teacher_id === teacherId).length;
+    let currentVideos = mediaList.filter(m => m.type === 'video' && m.teacher_id === teacherId).length;
     const newMediaItems: MediaItem[] = [];
 
     for (const file of files) {
       if (mode === 'MEDIA') {
+        if (!isStarter) {
+          alert(`Upload de mídias disponível a partir do plano STARTER. Arquivo ${file.name} ignorado.`);
+          continue;
+        }
         const type = file.type.startsWith('video') ? 'video' : 'image';
 
         if (type === 'video') {

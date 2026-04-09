@@ -81,7 +81,7 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
     schedules, setSchedules,
     isUploading, setIsUploading, handleFileUpload,
     deleteMedia, addSchedule, deleteSchedule
-  } = useMediaManager(teacherId, isPro, isBusiness);
+  } = useMediaManager(teacherId, isStarter, isPro, isBusiness);
 
   const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB' | 'PLAN'>('TIMER');
   const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');

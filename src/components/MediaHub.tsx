@@ -75,10 +75,16 @@ export default function MediaHub({
 
   const folders = Array.from(new Set([
     ...(dojoSettings.media_folders || []),
-    ...mediaList.map(m => m.name.includes('/') ? m.name.split('/')[0] : null).filter(Boolean)
+    ...mediaList
+      .filter(m => isPro ? true : m.teacher_id !== '00000000-0000-0000-0000-000000000000')
+      .map(m => m.name.includes('/') ? m.name.split('/')[0] : null)
+      .filter(Boolean)
   ])) as string[];
 
   const currentFolderMedia = mediaList.filter(m => {
+    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/')) {
+      return false;
+    }
     if (!currentFolder) return !m.name.includes('/');
     return m.name.startsWith(currentFolder + '/');
   }).sort((a, b) => {
@@ -341,8 +347,8 @@ export default function MediaHub({
     const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
     const type = isVideo ? 'video' : 'image';
     
-    const currentImages = mediaList.filter(m => m.type === 'image').length;
-    const currentVideos = mediaList.filter(m => m.type === 'video').length;
+    const currentImages = mediaList.filter(m => m.type === 'image' && m.teacher_id === teacherId).length;
+    const currentVideos = mediaList.filter(m => m.type === 'video' && m.teacher_id === teacherId).length;
 
     if (type === 'video') {
       if (!isPro) {
@@ -955,7 +961,7 @@ export default function MediaHub({
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-zinc-500 uppercase">Mídias ({editingPlaylist.media_ids.length})</label>
                       <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
-                        {mediaList.map(m => (
+                        {mediaList.filter(m => isPro ? true : !(m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/'))).map(m => (
                           <div 
                             key={m.id}
                             onClick={() => {
