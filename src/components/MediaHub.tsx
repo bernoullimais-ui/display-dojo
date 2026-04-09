@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { MediaItem, Playlist, DojoSettings, ScheduleItem } from '../types';
-import { Maximize, XCircle, Plus, Loader2, Upload, Crown, Lock, Trash2, PlayCircle, Image as ImageIcon, Video, Calendar, Clock, Edit, Settings, Check, Youtube, RotateCcw, VolumeX, Volume2, Volume1, FolderInput } from 'lucide-react';
+import { Maximize, XCircle, Plus, Loader2, Upload, Crown, Lock, Trash2, PlayCircle, Image as ImageIcon, Video, Calendar, Clock, Edit, Settings, Check, Youtube, RotateCcw, VolumeX, Volume2, Volume1, FolderInput, CheckSquare } from 'lucide-react';
 
 interface MediaHubProps {
   teacherId: string;
@@ -197,6 +197,67 @@ export default function MediaHub({
     } catch (e) {
       console.error(e);
       alert('Erro ao mover mídia.');
+    }
+  };
+
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
+  const [showBatchMoveModal, setShowBatchMoveModal] = useState(false);
+  const [batchMoveDestination, setBatchMoveDestination] = useState<string>('');
+
+  const toggleMediaSelection = (id: string) => {
+    setSelectedMediaIds(prev => prev.includes(id) ? prev.filter(mediaId => mediaId !== id) : [...prev, id]);
+  };
+
+  const handleBatchDelete = async () => {
+    if (!supabase || selectedMediaIds.length === 0) return;
+    if (!confirm(`Tem certeza que deseja excluir ${selectedMediaIds.length} mídias?`)) return;
+    
+    try {
+      const mediaToDelete = mediaList.filter(m => selectedMediaIds.includes(m.id));
+      for (const media of mediaToDelete) {
+        if (media.url.includes('dojo-media/')) {
+          const path = media.url.split('dojo-media/')[1];
+          await supabase.storage.from('dojo-media').remove([path]);
+        }
+      }
+      
+      await supabase.from('media').delete().in('id', selectedMediaIds);
+      setMediaList(prev => prev.filter(m => !selectedMediaIds.includes(m.id)));
+      setSelectedMediaIds([]);
+      setIsBatchMode(false);
+    } catch (error) {
+      console.error('Batch delete failed:', error);
+      alert('Erro ao excluir mídias.');
+    }
+  };
+
+  const handleBatchMove = async () => {
+    if (!supabase || selectedMediaIds.length === 0) return;
+    
+    try {
+      const mediaToMove = mediaList.filter(m => selectedMediaIds.includes(m.id));
+      const updatedMediaList = [...mediaList];
+      
+      for (const media of mediaToMove) {
+        const baseName = media.name.includes('/') ? media.name.split('/').pop() : media.name;
+        const newName = batchMoveDestination ? `${batchMoveDestination}/${baseName}` : baseName;
+        
+        await supabase.from('media').update({ name: newName }).eq('id', media.id);
+        
+        const index = updatedMediaList.findIndex(m => m.id === media.id);
+        if (index !== -1) {
+          updatedMediaList[index] = { ...updatedMediaList[index], name: newName! };
+        }
+      }
+      
+      setMediaList(updatedMediaList);
+      setSelectedMediaIds([]);
+      setShowBatchMoveModal(false);
+      setIsBatchMode(false);
+    } catch (error) {
+      console.error('Batch move failed:', error);
+      alert('Erro ao mover mídias.');
     }
   };
 
@@ -521,7 +582,47 @@ export default function MediaHub({
                   >
                     <Plus size={14} /> Nova Pasta
                   </button>
+                  <button 
+                    onClick={() => setIsBatchMode(!isBatchMode)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${isBatchMode ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+                  >
+                    <CheckSquare size={14} /> Selecionar
+                  </button>
                 </div>
+
+                {isBatchMode && (
+                  <div className="flex items-center justify-between bg-blue-600/20 border border-blue-500/50 p-3 rounded-xl mb-4">
+                    <span className="text-sm font-bold text-blue-400">{selectedMediaIds.length} mídias selecionadas</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowBatchMoveModal(true)} disabled={selectedMediaIds.length === 0} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-50">Mover</button>
+                      <button onClick={handleBatchDelete} disabled={selectedMediaIds.length === 0} className="bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-50">Excluir</button>
+                      <button onClick={() => { setIsBatchMode(false); setSelectedMediaIds([]); }} className="bg-zinc-800 text-white px-4 py-2 rounded-lg text-xs font-bold">Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                {showBatchMoveModal && (
+                  <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6">
+                    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl w-full max-w-md space-y-6">
+                      <h3 className="text-xl font-bold text-white">Mover {selectedMediaIds.length} mídias</h3>
+                      <p className="text-xs font-bold text-zinc-400 mb-2">Mover para:</p>
+                      <select 
+                        value={batchMoveDestination}
+                        onChange={(e) => setBatchMoveDestination(e.target.value)}
+                        className="w-full bg-black border border-zinc-800 text-white text-sm p-3 rounded-xl outline-none focus:border-blue-500"
+                      >
+                        <option value="">Raiz (Sem pasta)</option>
+                        {folders.map(f => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2 w-full pt-4">
+                        <button onClick={handleBatchMove} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">Mover</button>
+                        <button onClick={() => setShowBatchMoveModal(false)} className="flex-1 bg-zinc-800 text-white py-3 rounded-xl font-bold">Cancelar</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {showAddFolder && (
                   <div className="flex gap-2">
@@ -561,7 +662,11 @@ export default function MediaHub({
                     }
 
                     return (
-                      <div key={item.id} className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square">
+                      <div 
+                        key={item.id} 
+                        className={`group relative bg-zinc-900 rounded-2xl overflow-hidden border aspect-square ${isBatchMode ? 'cursor-pointer' : ''} ${selectedMediaIds.includes(item.id) ? 'border-blue-500 border-2' : 'border-zinc-800'}`}
+                        onClick={() => { if (isBatchMode) toggleMediaSelection(item.id); }}
+                      >
                         {item.type === 'image' ? (
                           <img src={item.url} className="w-full h-full object-cover opacity-70" />
                         ) : isYouTube ? (
@@ -578,12 +683,23 @@ export default function MediaHub({
                             <Video className="text-zinc-600" size={40} />
                           </div>
                         )}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white/90 text-black p-4 rounded-full shadow-lg pointer-events-auto active:scale-95 transition-transform">
-                            <PlayCircle size={32} />
-                          </button>
-                        </div>
-                        {item.teacher_id !== 'GLOBAL' && (
+                        
+                        {isBatchMode && (
+                          <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center">
+                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${selectedMediaIds.includes(item.id) ? 'bg-blue-500 border-blue-500' : 'border-white/50'}`}>
+                              {selectedMediaIds.includes(item.id) && <Check size={16} className="text-white" />}
+                            </div>
+                          </div>
+                        )}
+
+                        {!isBatchMode && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <button onClick={() => handleCommand('SHOW_MEDIA', item)} className="bg-white/90 text-black p-4 rounded-full shadow-lg pointer-events-auto active:scale-95 transition-transform">
+                              <PlayCircle size={32} />
+                            </button>
+                          </div>
+                        )}
+                        {!isBatchMode && item.teacher_id !== 'GLOBAL' && (
                           <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
                             <button onClick={() => { setMovingMedia(item); setMoveDestination(currentFolder || ''); }} className="bg-black/60 text-blue-400 p-2 rounded-full active:scale-95 transition-transform">
                               <FolderInput size={18} />
@@ -593,7 +709,7 @@ export default function MediaHub({
                             </button>
                           </div>
                         )}
-                        {movingMedia?.id === item.id && (
+                        {!isBatchMode && movingMedia?.id === item.id && (
                           <div className="absolute inset-0 bg-black/90 z-20 p-4 flex flex-col justify-center items-center">
                             <p className="text-xs font-bold text-white mb-2">Mover para:</p>
                             <select 
