@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { MediaItem, Playlist, DojoSettings, ScheduleItem } from '../types';
-import { Maximize, XCircle, Plus, Loader2, Upload, Crown, Lock, Trash2, PlayCircle, Image as ImageIcon, Video, Calendar, Clock, Edit, Settings, Check, Youtube, RotateCcw, VolumeX, Volume2, Volume1 } from 'lucide-react';
+import { Maximize, XCircle, Plus, Loader2, Upload, Crown, Lock, Trash2, PlayCircle, Image as ImageIcon, Video, Calendar, Clock, Edit, Settings, Check, Youtube, RotateCcw, VolumeX, Volume2, Volume1, FolderInput } from 'lucide-react';
 
 interface MediaHubProps {
   teacherId: string;
@@ -81,6 +81,10 @@ export default function MediaHub({
   const currentFolderMedia = mediaList.filter(m => {
     if (!currentFolder) return !m.name.includes('/');
     return m.name.startsWith(currentFolder + '/');
+  }).sort((a, b) => {
+    const nameA = (a.name.includes('/') ? a.name.split('/').pop() : a.name) || '';
+    const nameB = (b.name.includes('/') ? b.name.split('/').pop() : b.name) || '';
+    return nameA.localeCompare(nameB);
   });
 
   const handleCreateFolder = async () => {
@@ -126,6 +130,73 @@ export default function MediaHub({
     } else {
       setDojoSettings(prev => ({ ...prev, media_folders: newFolders }));
       if (currentFolder === folderName) setCurrentFolder(null);
+    }
+  };
+
+  const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  const [editFolderName, setEditFolderName] = useState('');
+  const [movingMedia, setMovingMedia] = useState<MediaItem | null>(null);
+  const [moveDestination, setMoveDestination] = useState<string>('');
+
+  const handleRenameFolder = async (oldName: string) => {
+    if (!editFolderName.trim() || !supabase) return;
+    const newName = editFolderName.trim();
+    if (newName === oldName) {
+      setEditingFolder(null);
+      return;
+    }
+    if (folders.includes(newName)) {
+      alert('Pasta já existe!');
+      return;
+    }
+
+    const newFolders = (dojoSettings.media_folders || []).map(f => f === oldName ? newName : f);
+    if (!newFolders.includes(newName)) {
+      newFolders.push(newName);
+    }
+    
+    const mediaToUpdate = mediaList.filter(m => m.name.startsWith(oldName + '/'));
+    
+    try {
+      await supabase.from('dojo_settings').update({ media_folders: newFolders }).eq('teacher_id', teacherId);
+      
+      const updatedMediaList = [...mediaList];
+      
+      for (const media of mediaToUpdate) {
+        const newMediaName = media.name.replace(`${oldName}/`, `${newName}/`);
+        await supabase.from('media').update({ name: newMediaName }).eq('id', media.id);
+        
+        const index = updatedMediaList.findIndex(m => m.id === media.id);
+        if (index !== -1) {
+          updatedMediaList[index] = { ...updatedMediaList[index], name: newMediaName };
+        }
+      }
+      
+      setDojoSettings(prev => ({ ...prev, media_folders: newFolders }));
+      setMediaList(updatedMediaList);
+      if (currentFolder === oldName) setCurrentFolder(newName);
+      setEditingFolder(null);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao renomear pasta.');
+    }
+  };
+
+  const handleMoveMedia = async () => {
+    if (!movingMedia || !supabase) return;
+    
+    const baseName = movingMedia.name.includes('/') ? movingMedia.name.split('/').pop() : movingMedia.name;
+    const newName = moveDestination ? `${moveDestination}/${baseName}` : baseName;
+    
+    try {
+      const { error } = await supabase.from('media').update({ name: newName }).eq('id', movingMedia.id);
+      if (error) throw error;
+      
+      setMediaList(prev => prev.map(m => m.id === movingMedia.id ? { ...m, name: newName! } : m));
+      setMovingMedia(null);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao mover mídia.');
     }
   };
 
@@ -398,18 +469,50 @@ export default function MediaHub({
                   </button>
                   {folders.map(folder => (
                     <div key={folder} className="flex items-center group">
-                      <button 
-                        onClick={() => setCurrentFolder(folder)}
-                        className={`px-4 py-2 rounded-l-xl text-xs font-bold whitespace-nowrap transition-colors ${currentFolder === folder ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
-                      >
-                        {folder}
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteFolder(folder)}
-                        className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {editingFolder === folder ? (
+                        <div className="flex items-center">
+                          <input 
+                            type="text" 
+                            value={editFolderName}
+                            onChange={(e) => setEditFolderName(e.target.value)}
+                            className="bg-black border border-zinc-800 rounded-l-xl px-3 py-1.5 text-xs outline-none focus:border-blue-500 w-24"
+                            autoFocus
+                          />
+                          <button 
+                            onClick={() => handleRenameFolder(folder)}
+                            className="px-2 py-1.5 bg-blue-600 text-white text-xs hover:bg-blue-700"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button 
+                            onClick={() => setEditingFolder(null)}
+                            className="px-2 py-1.5 rounded-r-xl bg-zinc-800 text-zinc-400 text-xs hover:bg-zinc-700"
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={() => setCurrentFolder(folder)}
+                            className={`px-4 py-2 rounded-l-xl text-xs font-bold whitespace-nowrap transition-colors ${currentFolder === folder ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+                          >
+                            {folder}
+                          </button>
+                          <button 
+                            onClick={() => { setEditingFolder(folder); setEditFolderName(folder); }}
+                            className={`px-2 py-2 text-xs transition-colors ${currentFolder === folder ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'}`}
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteFolder(folder)}
+                            className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                   <button 
@@ -481,9 +584,33 @@ export default function MediaHub({
                           </button>
                         </div>
                         {item.teacher_id !== 'GLOBAL' && (
-                          <button onClick={() => deleteMedia(item.id, item.url)} className="absolute top-2 right-2 bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform z-10">
-                            <Trash2 size={18} />
-                          </button>
+                          <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
+                            <button onClick={() => { setMovingMedia(item); setMoveDestination(currentFolder || ''); }} className="bg-black/60 text-blue-400 p-2 rounded-full active:scale-95 transition-transform">
+                              <FolderInput size={18} />
+                            </button>
+                            <button onClick={() => deleteMedia(item.id, item.url)} className="bg-black/60 text-red-500 p-2 rounded-full active:scale-95 transition-transform">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        )}
+                        {movingMedia?.id === item.id && (
+                          <div className="absolute inset-0 bg-black/90 z-20 p-4 flex flex-col justify-center items-center">
+                            <p className="text-xs font-bold text-white mb-2">Mover para:</p>
+                            <select 
+                              value={moveDestination}
+                              onChange={(e) => setMoveDestination(e.target.value)}
+                              className="w-full bg-zinc-800 text-white text-xs p-2 rounded-lg mb-2"
+                            >
+                              <option value="">Raiz (Sem pasta)</option>
+                              {folders.map(f => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-2 w-full">
+                              <button onClick={handleMoveMedia} className="flex-1 bg-blue-600 text-white text-xs py-2 rounded-lg font-bold">Mover</button>
+                              <button onClick={() => setMovingMedia(null)} className="flex-1 bg-zinc-700 text-white text-xs py-2 rounded-lg font-bold">Cancelar</button>
+                            </div>
+                          </div>
                         )}
                         <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded-lg max-w-[70%]">
                           <p className="text-[10px] font-bold text-white truncate">{displayName}</p>
