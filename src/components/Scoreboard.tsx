@@ -145,27 +145,47 @@ export default function Scoreboard({
     return audioContextRef.current;
   };
 
-  const playBuzzer = () => {
+  const playWhistle = () => {
     if (isMuted) return;
     try {
       const ctx = getAudioContext();
       if (!ctx) return;
       
+      const duration = 1.2;
+      
+      // Main oscillator
       const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(2400, ctx.currentTime);
+      // Slight pitch bend up then down
+      osc.frequency.linearRampToValueAtTime(2600, ctx.currentTime + 0.1);
+      osc.frequency.linearRampToValueAtTime(2400, ctx.currentTime + duration);
+      
+      // Modulator (for the "pea" trill effect)
+      const mod = ctx.createOscillator();
+      mod.type = 'sine';
+      mod.frequency.value = 45; // 45 Hz trill
+      
+      const modGain = ctx.createGain();
+      modGain.gain.value = 150; // frequency variation amount
+      
+      mod.connect(modGain);
+      modGain.connect(osc.frequency);
+      
+      // Main gain (envelope)
       const gain = ctx.createGain();
-      
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(150, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 1.5);
-      
-      gain.gain.setValueAtTime(volume / 100, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(volume / 100, ctx.currentTime + 0.05); // sharp attack
+      gain.gain.setValueAtTime(volume / 100, ctx.currentTime + duration - 0.2);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration); // fade out
       
       osc.connect(gain);
       gain.connect(ctx.destination);
       
-      osc.start();
-      osc.stop(ctx.currentTime + 1.5);
+      osc.start(ctx.currentTime);
+      mod.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + duration);
+      mod.stop(ctx.currentTime + duration);
     } catch (e) {
       console.error('Audio play failed:', e);
     }
@@ -210,7 +230,7 @@ export default function Scoreboard({
           setMatchTime(prev => {
             if (prev <= 1) {
               setIsMatchRunning(false);
-              playBuzzer();
+              playWhistle();
               return 0;
             }
             return prev - 1;

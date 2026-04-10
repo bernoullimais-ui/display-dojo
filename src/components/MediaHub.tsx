@@ -61,6 +61,7 @@ export default function MediaHub({
   const [mediaUrlInput, setMediaUrlInput] = useState('');
   const [mediaSponsorInput, setMediaSponsorInput] = useState('');
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
+  const [playlistFolder, setPlaylistFolder] = useState<string | null>(null);
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [newSchedule, setNewSchedule] = useState({
     playlist_id: '',
@@ -106,6 +107,30 @@ export default function MediaHub({
     if (!currentFolder) return !m.name.includes('/');
     if (!m.name.startsWith(currentFolder + '/')) return false;
     const rest = m.name.substring(currentFolder.length + 1);
+    return !rest.includes('/');
+  }).sort((a, b) => {
+    const nameA = (a.name.includes('/') ? a.name.split('/').pop() : a.name) || '';
+    const nameB = (b.name.includes('/') ? b.name.split('/').pop() : b.name) || '';
+    return nameA.localeCompare(nameB);
+  });
+
+  const playlistSubFolders = playlistFolder 
+    ? Array.from(new Set(allFolders
+        .filter(f => f.startsWith(playlistFolder + '/') && f !== playlistFolder)
+        .map(f => {
+          const rest = f.substring(playlistFolder.length + 1);
+          return rest.split('/')[0];
+        })
+      ))
+    : [];
+
+  const playlistFolderMedia = mediaList.filter(m => {
+    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/')) {
+      return false;
+    }
+    if (!playlistFolder) return !m.name.includes('/');
+    if (!m.name.startsWith(playlistFolder + '/')) return false;
+    const rest = m.name.substring(playlistFolder.length + 1);
     return !rest.includes('/');
   }).sort((a, b) => {
     const nameA = (a.name.includes('/') ? a.name.split('/').pop() : a.name) || '';
@@ -1089,46 +1114,113 @@ export default function MediaHub({
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Mídias ({editingPlaylist.media_ids.length})</label>
-                      <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
-                        {mediaList.filter(m => isPro ? true : !(m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/'))).map(m => (
-                          <div 
-                            key={m.id}
-                            onClick={() => {
-                              setEditingPlaylist(prev => {
-                                if (!prev) return prev;
-                                const newIds = prev.media_ids.includes(m.id) 
-                                  ? prev.media_ids.filter(id => id !== m.id)
-                                  : [...prev.media_ids, m.id];
-                                return { ...prev, media_ids: newIds };
-                              });
-                            }}
-                            className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${editingPlaylist.media_ids.includes(m.id) ? 'border-blue-500 scale-95' : 'border-transparent hover:border-zinc-700'}`}
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase">Mídias ({editingPlaylist.media_ids.length})</label>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2">
+                        <button 
+                          onClick={() => setPlaylistFolder(null)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${!playlistFolder ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                        >
+                          Tudo
+                        </button>
+                        {rootFolders.map(folder => (
+                          <button 
+                            key={folder}
+                            onClick={() => setPlaylistFolder(folder)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${playlistFolder === folder || playlistFolder?.startsWith(folder + '/') ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
                           >
-                            {m.type === 'image' ? (
-                              <img src={m.url} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full relative bg-zinc-800">
-                                <img 
-                                  src={`${m.url}_thumb.jpg`} 
-                                  className="w-full h-full object-cover" 
-                                  onError={(e) => { 
-                                    e.currentTarget.style.display = 'none'; 
-                                    e.currentTarget.nextElementSibling?.classList.remove('hidden'); 
-                                  }} 
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center hidden">
-                                  <Video size={20} className="text-zinc-500" />
-                                </div>
-                              </div>
-                            )}
-                            {editingPlaylist.media_ids.includes(m.id) && (
-                              <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                                <div className="bg-blue-500 text-white rounded-full p-1"><Check size={16} /></div>
-                              </div>
-                            )}
+                            {folder}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
+                        {playlistFolder && (
+                          <div 
+                            className="relative aspect-video bg-zinc-800 rounded-lg overflow-hidden cursor-pointer flex flex-col items-center justify-center hover:bg-zinc-700 transition-colors"
+                            onClick={() => {
+                              const parts = playlistFolder.split('/');
+                              parts.pop();
+                              setPlaylistFolder(parts.length > 0 ? parts.join('/') : null);
+                            }}
+                          >
+                            <FolderUp size={24} className="text-zinc-500 mb-1" />
+                            <span className="text-[10px] font-bold text-zinc-400">Voltar</span>
+                          </div>
+                        )}
+
+                        {playlistSubFolders.map(subFolder => (
+                          <div 
+                            key={subFolder}
+                            className="relative aspect-video bg-zinc-800 rounded-lg overflow-hidden cursor-pointer flex flex-col items-center justify-center hover:bg-zinc-700 transition-colors"
+                            onDoubleClick={() => {
+                              setPlaylistFolder(playlistFolder ? `${playlistFolder}/${subFolder}` : subFolder);
+                            }}
+                          >
+                            <Folder size={24} className="text-blue-500 mb-1" />
+                            <span className="text-[10px] font-bold text-zinc-300 truncate w-full text-center px-1">{subFolder}</span>
                           </div>
                         ))}
+
+                        {playlistFolderMedia.map(m => {
+                          const isYouTube = m.url.includes('youtube.com') || m.url.includes('youtu.be');
+                          let youtubeVideoId = null;
+                          if (isYouTube) {
+                            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                            const match = m.url.match(regExp);
+                            youtubeVideoId = (match && match[2].length === 11) ? match[2] : null;
+                          }
+
+                          return (
+                            <div 
+                              key={m.id}
+                              onClick={() => {
+                                setEditingPlaylist(prev => {
+                                  if (!prev) return prev;
+                                  const newIds = prev.media_ids.includes(m.id) 
+                                    ? prev.media_ids.filter(id => id !== m.id)
+                                    : [...prev.media_ids, m.id];
+                                  return { ...prev, media_ids: newIds };
+                                });
+                              }}
+                              className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${editingPlaylist.media_ids.includes(m.id) ? 'border-blue-500 scale-95' : 'border-transparent hover:border-zinc-700'}`}
+                            >
+                              {m.type === 'image' ? (
+                                <img src={m.url} className="w-full h-full object-cover" />
+                              ) : isYouTube ? (
+                                <div className="w-full h-full relative bg-zinc-800">
+                                  {youtubeVideoId && (
+                                    <img src={`https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-70" />
+                                  )}
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <Youtube size={20} className="text-red-600 drop-shadow-lg" />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-full h-full relative bg-zinc-800">
+                                  <img 
+                                    src={`${m.url}_thumb.jpg`} 
+                                    className="w-full h-full object-cover opacity-70" 
+                                    onError={(e) => { 
+                                      e.currentTarget.style.display = 'none'; 
+                                      e.currentTarget.nextElementSibling?.classList.remove('hidden'); 
+                                    }} 
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center hidden">
+                                    <Video size={20} className="text-zinc-500" />
+                                  </div>
+                                </div>
+                              )}
+                              {editingPlaylist.media_ids.includes(m.id) && (
+                                <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                                  <div className="bg-blue-500 text-white rounded-full p-1"><Check size={16} /></div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1335,7 +1427,14 @@ export default function MediaHub({
                     <input 
                       type="file" 
                       ref={logoInputRef} 
-                      onChange={(e) => handleFileUpload(e, 'LOGO')} 
+                      onChange={(e) => handleFileUpload(e, 'LOGO', async (url) => {
+                        const newSettings = { ...dojoSettings, logo_url: url };
+                        setDojoSettings(newSettings);
+                        if (supabase) {
+                          await supabase.from('dojo_settings').update({ logo_url: url }).eq('teacher_id', teacherId);
+                          handleCommand('SETTINGS_UPDATE', newSettings);
+                        }
+                      })} 
                       className="hidden" 
                       accept="image/*" 
                     />

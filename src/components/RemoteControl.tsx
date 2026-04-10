@@ -349,8 +349,9 @@ const fileInputRef = useRef<HTMLInputElement>(null);
           </div>
           <button onClick={async () => {
             if (supabase) {
+              await supabase.from('sessions').update({ status: 'pending', teacher_id: null }).eq('teacher_id', teacherId);
               await supabase.auth.signOut();
-              window.location.href = '/';
+              window.location.href = '/?remote=true';
             }
           }} className="text-zinc-500 flex items-center gap-1 text-sm bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 hover:text-red-500">
             <LogOut size={16} /> Sair
