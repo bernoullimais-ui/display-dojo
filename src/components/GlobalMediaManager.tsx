@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Plus, Upload, Trash2, Video, Youtube, PlayCircle, Image as ImageIcon, X, Edit, XCircle, FolderInput, Check, CheckSquare } from 'lucide-react';
+import { Loader2, Plus, Upload, Trash2, Video, Youtube, PlayCircle, Image as ImageIcon, X, Edit, XCircle, FolderInput, Check, CheckSquare, Folder, FolderUp } from 'lucide-react';
 
 interface MediaItem {
   id: string;
@@ -74,14 +74,34 @@ export default function GlobalMediaManager() {
     setLoading(false);
   };
 
-  const folders = Array.from(new Set([
+  const allFolders = Array.from(new Set([
     ...mediaFolders,
-    ...mediaList.map(m => m.name.includes('/') ? m.name.split('/')[0] : null).filter(Boolean)
+    ...mediaList.map(m => {
+      const parts = m.name.split('/');
+      if (parts.length > 1) {
+        return parts.slice(0, -1).join('/');
+      }
+      return null;
+    }).filter(Boolean)
   ])) as string[];
+
+  const rootFolders = Array.from(new Set(allFolders.map(f => f.split('/')[0])));
+
+  const currentSubFolders = currentFolder 
+    ? Array.from(new Set(allFolders
+        .filter(f => f.startsWith(currentFolder + '/') && f !== currentFolder)
+        .map(f => {
+          const rest = f.substring(currentFolder.length + 1);
+          return rest.split('/')[0];
+        })
+      ))
+    : [];
 
   const currentFolderMedia = mediaList.filter(m => {
     if (!currentFolder) return !m.name.includes('/');
-    return m.name.startsWith(currentFolder + '/');
+    if (!m.name.startsWith(currentFolder + '/')) return false;
+    const rest = m.name.substring(currentFolder.length + 1);
+    return !rest.includes('/');
   }).sort((a, b) => {
     const nameA = (a.name.includes('/') ? a.name.split('/').pop() : a.name) || '';
     const nameB = (b.name.includes('/') ? b.name.split('/').pop() : b.name) || '';
@@ -91,12 +111,14 @@ export default function GlobalMediaManager() {
   const handleCreateFolder = async () => {
     if (!newFolderName.trim() || !supabase) return;
     const folderName = newFolderName.trim();
-    if (folders.includes(folderName)) {
+    const fullPath = currentFolder ? `${currentFolder}/${folderName}` : folderName;
+    
+    if (allFolders.includes(fullPath)) {
       alert('Pasta já existe!');
       return;
     }
     
-    const newFolders = [...mediaFolders, folderName];
+    const newFolders = [...mediaFolders, fullPath];
     const { error } = await supabase
       .from('dojo_settings')
       .update({ media_folders: newFolders })
@@ -112,15 +134,17 @@ export default function GlobalMediaManager() {
     }
   };
 
-  const handleDeleteFolder = async (folderName: string) => {
+  const handleDeleteFolder = async (folderPath: string) => {
     if (!supabase) return;
-    const folderMedia = mediaList.filter(m => m.name.startsWith(folderName + '/'));
-    if (folderMedia.length > 0) {
-      alert('A pasta não está vazia. Exclua as mídias primeiro.');
+    const folderMedia = mediaList.filter(m => m.name.startsWith(folderPath + '/'));
+    const subFolders = allFolders.filter(f => f.startsWith(folderPath + '/') && f !== folderPath);
+    
+    if (folderMedia.length > 0 || subFolders.length > 0) {
+      alert('A pasta não está vazia. Exclua as mídias e sub-pastas primeiro.');
       return;
     }
     
-    const newFolders = mediaFolders.filter(f => f !== folderName);
+    const newFolders = mediaFolders.filter(f => f !== folderPath);
     const { error } = await supabase
       .from('dojo_settings')
       .update({ media_folders: newFolders })
@@ -130,7 +154,7 @@ export default function GlobalMediaManager() {
       alert('Erro ao excluir pasta.');
     } else {
       setMediaFolders(newFolders);
-      if (currentFolder === folderName) setCurrentFolder(null);
+      if (currentFolder === folderPath) setCurrentFolder(null);
     }
   };
 
@@ -139,24 +163,32 @@ export default function GlobalMediaManager() {
   const [movingMedia, setMovingMedia] = useState<MediaItem | null>(null);
   const [moveDestination, setMoveDestination] = useState<string>('');
 
-  const handleRenameFolder = async (oldName: string) => {
+  const handleRenameFolder = async (oldPath: string) => {
     if (!editFolderName.trim() || !supabase) return;
     const newName = editFolderName.trim();
-    if (newName === oldName) {
+    
+    const parentPath = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : null;
+    const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+
+    if (newPath === oldPath) {
       setEditingFolder(null);
       return;
     }
-    if (folders.includes(newName)) {
+    if (allFolders.includes(newPath)) {
       alert('Pasta já existe!');
       return;
     }
 
-    const newFolders = mediaFolders.map(f => f === oldName ? newName : f);
-    if (!newFolders.includes(newName)) {
-      newFolders.push(newName);
+    const newFolders = mediaFolders.map(f => {
+      if (f === oldPath) return newPath;
+      if (f.startsWith(oldPath + '/')) return f.replace(`${oldPath}/`, `${newPath}/`);
+      return f;
+    });
+    if (!newFolders.includes(newPath)) {
+      newFolders.push(newPath);
     }
     
-    const mediaToUpdate = mediaList.filter(m => m.name.startsWith(oldName + '/'));
+    const mediaToUpdate = mediaList.filter(m => m.name.startsWith(oldPath + '/'));
     
     try {
       await supabase.from('dojo_settings').update({ media_folders: newFolders }).eq('teacher_id', '00000000-0000-0000-0000-000000000000');
@@ -164,7 +196,7 @@ export default function GlobalMediaManager() {
       const updatedMediaList = [...mediaList];
       
       for (const media of mediaToUpdate) {
-        const newMediaName = media.name.replace(`${oldName}/`, `${newName}/`);
+        const newMediaName = media.name.replace(`${oldPath}/`, `${newPath}/`);
         await supabase.from('media').update({ name: newMediaName }).eq('id', media.id);
         
         const index = updatedMediaList.findIndex(m => m.id === media.id);
@@ -175,7 +207,10 @@ export default function GlobalMediaManager() {
       
       setMediaFolders(newFolders);
       setMediaList(updatedMediaList);
-      if (currentFolder === oldName) setCurrentFolder(newName);
+      if (currentFolder === oldPath) setCurrentFolder(newPath);
+      else if (currentFolder?.startsWith(oldPath + '/')) {
+        setCurrentFolder(currentFolder.replace(`${oldPath}/`, `${newPath}/`));
+      }
       setEditingFolder(null);
     } catch (e) {
       console.error(e);
@@ -220,6 +255,9 @@ export default function GlobalMediaManager() {
         if (media.url.includes('dojo-media/')) {
           const path = media.url.split('dojo-media/')[1];
           await supabase.storage.from('dojo-media').remove([path]);
+          if (media.url.match(/\.(mp4|webm|ogg|mov)$/i)) {
+            await supabase.storage.from('dojo-media').remove([`${path}_thumb.jpg`]);
+          }
         }
       }
       
@@ -341,6 +379,38 @@ export default function GlobalMediaManager() {
       });
   };
 
+  const generateThumbnail = (file: File): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      
+      video.onloadedmetadata = () => {
+        video.currentTime = Math.min(1, video.duration / 2);
+      };
+      
+      video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          window.URL.revokeObjectURL(video.src);
+          resolve(blob);
+        }, 'image/jpeg', 0.7);
+      };
+      
+      video.onerror = () => {
+        window.URL.revokeObjectURL(video.src);
+        resolve(null);
+      };
+      
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, mode: 'LOGO' | 'SPONSOR' | 'TIMER_SPONSOR' | 'MEDIA' = 'MEDIA') => {
     const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0 || !supabase) return;
@@ -366,6 +436,16 @@ export default function GlobalMediaManager() {
           .from('dojo-media')
           .getPublicUrl(filePath);
 
+        const type = file.type.startsWith('video') ? 'video' : 'image';
+        
+        if (type === 'video') {
+          const thumbBlob = await generateThumbnail(file);
+          if (thumbBlob) {
+            const thumbPath = `${filePath}_thumb.jpg`;
+            await supabase.storage.from('dojo-media').upload(thumbPath, thumbBlob);
+          }
+        }
+
         if (mode === 'LOGO') {
           setDojoLogo(publicUrl);
           await supabase
@@ -376,13 +456,10 @@ export default function GlobalMediaManager() {
               updated_at: new Date().toISOString()
             });
         } else if (mode === 'SPONSOR') {
-          const type = file.type.startsWith('video') ? 'video' : 'image';
           newUploadedSponsors.push({ url: publicUrl, type: type as 'image' | 'video' });
         } else if (mode === 'TIMER_SPONSOR') {
-          const type = file.type.startsWith('video') ? 'video' : 'image';
           newUploadedTimerSponsors.push({ url: publicUrl, type: type as 'image' | 'video' });
         } else {
-          const type = file.type.startsWith('video') ? 'video' : 'image';
           const { data: mediaData, error: dbError } = await supabase
             .from('media')
             .insert([{
@@ -538,6 +615,10 @@ export default function GlobalMediaManager() {
       if (url.includes('dojo-media/')) {
         const path = url.split('dojo-media/')[1];
         await supabase.storage.from('dojo-media').remove([path]);
+        
+        if (url.match(/\.(mp4|webm|ogg|mov)$/i)) {
+          await supabase.storage.from('dojo-media').remove([`${path}_thumb.jpg`]);
+        }
       }
       await supabase.from('media').delete().eq('id', id);
       setMediaList(prev => prev.filter(m => m.id !== id));
@@ -807,7 +888,7 @@ export default function GlobalMediaManager() {
             >
               Tudo
             </button>
-            {folders.map(folder => (
+            {rootFolders.map(folder => (
               <div key={folder} className="flex items-center group">
                 {editingFolder === folder ? (
                   <div className="flex items-center">
@@ -835,19 +916,19 @@ export default function GlobalMediaManager() {
                   <>
                     <button 
                       onClick={() => setCurrentFolder(folder)}
-                      className={`px-4 py-2 rounded-l-xl text-xs font-bold whitespace-nowrap transition-colors ${currentFolder === folder ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+                      className={`px-4 py-2 rounded-l-xl text-xs font-bold whitespace-nowrap transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
                     >
                       {folder}
                     </button>
                     <button 
                       onClick={() => { setEditingFolder(folder); setEditFolderName(folder); }}
-                      className={`px-2 py-2 text-xs transition-colors ${currentFolder === folder ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'}`}
+                      className={`px-2 py-2 text-xs transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'}`}
                     >
                       <Edit size={14} />
                     </button>
                     <button 
                       onClick={() => handleDeleteFolder(folder)}
-                      className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
+                      className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -891,7 +972,7 @@ export default function GlobalMediaManager() {
                   className="w-full bg-black border border-zinc-800 text-white text-sm p-3 rounded-xl outline-none focus:border-blue-500"
                 >
                   <option value="">Raiz (Sem pasta)</option>
-                  {folders.map(f => (
+                  {allFolders.map(f => (
                     <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
@@ -929,6 +1010,88 @@ export default function GlobalMediaManager() {
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {currentFolder && (
+              <div 
+                className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square cursor-pointer flex flex-col items-center justify-center hover:bg-zinc-800 transition-colors"
+                onClick={() => {
+                  const parts = currentFolder.split('/');
+                  parts.pop();
+                  setCurrentFolder(parts.length > 0 ? parts.join('/') : null);
+                }}
+              >
+                <FolderUp size={40} className="text-zinc-500 mb-2" />
+                <span className="text-xs font-bold text-zinc-400">Voltar</span>
+              </div>
+            )}
+
+            {currentSubFolders.map(subFolder => {
+              const fullPath = currentFolder ? `${currentFolder}/${subFolder}` : subFolder;
+              return (
+                <div 
+                  key={subFolder}
+                  className="group relative bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 aspect-square cursor-pointer flex flex-col items-center justify-center hover:bg-zinc-800 transition-colors"
+                  onDoubleClick={() => {
+                    if (editingFolder !== fullPath) {
+                      setCurrentFolder(fullPath);
+                    }
+                  }}
+                >
+                  {editingFolder === fullPath ? (
+                    <div className="flex flex-col items-center p-4 w-full gap-2">
+                      <input 
+                        type="text" 
+                        value={editFolderName}
+                        onChange={(e) => setEditFolderName(e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded-lg px-2 py-1 text-xs outline-none focus:border-blue-500 text-center"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="flex gap-2 w-full">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleRenameFolder(fullPath); }}
+                          className="flex-1 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
+                        >
+                          <Check size={14} className="mx-auto" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingFolder(null); }}
+                          className="flex-1 py-1 bg-zinc-800 text-zinc-400 text-xs rounded-lg hover:bg-zinc-700"
+                        >
+                          <XCircle size={14} className="mx-auto" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Folder size={40} className="text-blue-500 mb-2" />
+                      <span className="text-xs font-bold text-zinc-300">{subFolder}</span>
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setEditingFolder(fullPath); 
+                            setEditFolderName(subFolder); 
+                          }} 
+                          className="p-1.5 bg-blue-600 rounded-lg text-white"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            handleDeleteFolder(fullPath); 
+                          }} 
+                          className="p-1.5 bg-red-600 rounded-lg text-white"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
             {currentFolderMedia.map((item) => {
               const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
               const displayName = item.name.includes('/') ? item.name.split('/').pop() : item.name;
@@ -958,8 +1121,18 @@ export default function GlobalMediaManager() {
                       </div>
                     </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-zinc-900 opacity-70 group-hover:opacity-50 transition-opacity">
-                      <Video className="text-zinc-600" size={40} />
+                    <div className="w-full h-full relative bg-zinc-900 opacity-70 group-hover:opacity-50 transition-opacity">
+                      <img 
+                        src={`${item.url}_thumb.jpg`} 
+                        className="w-full h-full object-cover" 
+                        onError={(e) => { 
+                          e.currentTarget.style.display = 'none'; 
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden'); 
+                        }} 
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center hidden">
+                        <Video className="text-zinc-600" size={40} />
+                      </div>
                     </div>
                   )}
 
@@ -1002,7 +1175,7 @@ export default function GlobalMediaManager() {
                         className="w-full bg-zinc-800 text-white text-xs p-2 rounded-lg mb-2"
                       >
                         <option value="">Raiz (Sem pasta)</option>
-                        {folders.map(f => (
+                        {allFolders.map(f => (
                           <option key={f} value={f}>{f}</option>
                         ))}
                       </select>

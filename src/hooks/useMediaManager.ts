@@ -42,6 +42,38 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
     });
   };
 
+  const generateThumbnail = (file: File): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      
+      video.onloadedmetadata = () => {
+        video.currentTime = Math.min(1, video.duration / 2);
+      };
+      
+      video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          window.URL.revokeObjectURL(video.src);
+          resolve(blob);
+        }, 'image/jpeg', 0.7);
+      };
+      
+      video.onerror = () => {
+        window.URL.revokeObjectURL(video.src);
+        resolve(null);
+      };
+      
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     mode: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST' = 'MEDIA',
@@ -128,12 +160,21 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
           .from('dojo-media')
           .getPublicUrl(filePath);
 
+        const type = file.type.startsWith('video') ? 'video' : 'image';
+        
+        if (type === 'video') {
+          const thumbBlob = await generateThumbnail(file);
+          if (thumbBlob) {
+            const thumbPath = `${filePath}_thumb.jpg`;
+            await supabase.storage.from('dojo-media').upload(thumbPath, thumbBlob);
+          }
+        }
+
         if (mode === 'LOGO') {
           if (onLogoUpload) onLogoUpload(publicUrl);
         } else if (['PREP', 'WORK', 'REST'].includes(mode)) {
           if (onAudioUpload) onAudioUpload(mode, publicUrl);
         } else {
-          const type = file.type.startsWith('video') ? 'video' : 'image';
           const { data: mediaData, error: dbError } = await supabase
             .from('media')
             .insert({
@@ -171,6 +212,11 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
     try {
       const path = url.split('dojo-media/')[1];
       await supabase.storage.from('dojo-media').remove([path]);
+      
+      if (url.match(/\.(mp4|webm|ogg|mov)$/i)) {
+        await supabase.storage.from('dojo-media').remove([`${path}_thumb.jpg`]);
+      }
+      
       await supabase.from('media').delete().eq('id', id);
       setMediaList(mediaList.filter(m => m.id !== id));
     } catch (error) {

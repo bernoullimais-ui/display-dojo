@@ -135,19 +135,22 @@ export default function Scoreboard({
 
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  const getAudioContext = () => {
+    if (!audioContextRef.current) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        audioContextRef.current = new AudioCtx();
+      }
+    }
+    return audioContextRef.current;
+  };
+
   const playBuzzer = () => {
     if (isMuted) return;
     try {
-      if (!audioContextRef.current) {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          audioContextRef.current = new AudioCtx();
-        } else {
-          return;
-        }
-      }
+      const ctx = getAudioContext();
+      if (!ctx) return;
       
-      const ctx = audioContextRef.current;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       
@@ -163,6 +166,37 @@ export default function Scoreboard({
       
       osc.start();
       osc.stop(ctx.currentTime + 1.5);
+    } catch (e) {
+      console.error('Audio play failed:', e);
+    }
+  };
+
+  const playIpponSound = () => {
+    if (isMuted) return;
+    try {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      
+      // Double high-pitched beep for Ippon
+      const playBeep = (startTime: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, startTime); // A5
+        
+        gain.gain.setValueAtTime(volume / 100, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start(startTime);
+        osc.stop(startTime + 0.3);
+      };
+
+      playBeep(ctx.currentTime);
+      playBeep(ctx.currentTime + 0.4);
     } catch (e) {
       console.error('Audio play failed:', e);
     }
@@ -289,6 +323,8 @@ export default function Scoreboard({
     if (!osaekomiActive) return;
 
     const activePlayer = osaekomiActive;
+    const currentScore = activePlayer === 'blue' ? blueScore : whiteScore;
+    
     const updateScore = (player: 'blue' | 'white', updates: (s: any) => any) => {
       if (player === 'blue') {
         setBlueScore(s => ({ ...s, ...updates(s) }));
@@ -300,13 +336,23 @@ export default function Scoreboard({
     if (osaekomiTime === 5) {
       updateScore(activePlayer, s => ({ yuko: s.yuko + 1 }));
     } else if (osaekomiTime === 10) {
-      updateScore(activePlayer, s => ({ wazaari: s.wazaari + 1, yuko: Math.max(0, s.yuko - 1) }));
+      if (currentScore.wazaari >= 1) {
+        // Waza-ari-awasete-ippon
+        updateScore(activePlayer, s => ({ ippon: s.ippon + 1, wazaari: Math.max(0, s.wazaari - 1) }));
+        playIpponSound();
+        setOsaekomiActive(null);
+        setOsaekomiTime(0);
+      } else {
+        updateScore(activePlayer, s => ({ wazaari: s.wazaari + 1, yuko: Math.max(0, s.yuko - 1) }));
+      }
     } else if (osaekomiTime === 20) {
+      // Ippon
       updateScore(activePlayer, s => ({ ippon: s.ippon + 1, wazaari: Math.max(0, s.wazaari - 1) }));
+      playIpponSound();
       setOsaekomiActive(null);
       setOsaekomiTime(0);
     }
-  }, [osaekomiTime, osaekomiActive]);
+  }, [osaekomiTime, osaekomiActive, blueScore.wazaari, whiteScore.wazaari]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
