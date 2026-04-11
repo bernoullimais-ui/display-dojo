@@ -6,6 +6,7 @@ import { Maximize, XCircle, Plus, Loader2, Upload, Crown, Lock, Trash2, PlayCirc
 
 interface MediaHubProps {
   teacherId: string;
+  pairingCode: string;
   isStarter: boolean;
   isPro: boolean;
   isBusiness: boolean;
@@ -35,6 +36,7 @@ import LiveBroadcastModal from './LiveBroadcastModal';
 
 export default function MediaHub({
   teacherId,
+  pairingCode,
   isStarter,
   isPro,
   isBusiness,

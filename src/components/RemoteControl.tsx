@@ -586,6 +586,7 @@ const fileInputRef = useRef<HTMLInputElement>(null);
         {activeTab === 'MEDIA_HUB' && (
           <MediaHub 
             teacherId={teacherId}
+            pairingCode={pairingCode}
             isStarter={isStarter}
             isPro={isPro}
             isBusiness={isBusiness}
