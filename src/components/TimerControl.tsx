@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion } from 'motion/react';
-import { Timer as TimerIcon, Upload, Check, XCircle, Zap, Coffee, RotateCcw, Volume2, Trash2, Lock } from 'lucide-react';
+import { Timer as TimerIcon, Upload, Check, Zap, Coffee, RotateCcw, Volume2, Trash2, Lock } from 'lucide-react';
 import { TimerPreset } from '../types';
 
 interface TimerControlProps {
@@ -66,13 +66,6 @@ export default function TimerControl({
                 className="w-full bg-zinc-800 py-4 rounded-2xl font-bold text-zinc-300 flex items-center justify-center gap-2"
               >
                 OMITIR TREINO
-              </motion.button>
-              <motion.button 
-                whileTap={{ scale: 0.95, filter: 'brightness(1.2)' }}
-                onClick={() => handleCommand('STOP_MEDIA')} 
-                className="w-full bg-red-500/10 border border-red-500/20 py-4 rounded-2xl font-bold text-red-500 flex items-center justify-center gap-2"
-              >
-                <XCircle size={18} /> PARAR MÍDIA
               </motion.button>
             </div>
 

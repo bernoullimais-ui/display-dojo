@@ -51,7 +51,7 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
     updateScoreboardConfig, updateTickerConfig,
     updateSponsorsConfig, updatePlaylists, updateTvPlaylist,
     handleConfigChange
-  } = useDojoSync(teacherId, (type, payload) => onSendCommand(activeTvId, type, payload));
+  } = useDojoSync(teacherId, (type, payload, targetTvId) => onSendCommand(targetTvId || activeTvId, type, payload));
 
   const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
   const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);

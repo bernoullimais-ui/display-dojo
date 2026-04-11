@@ -31,6 +31,8 @@ interface MediaHubProps {
   handleConfigChange: (newSettings: any) => Promise<void>;
 }
 
+import LiveBroadcastModal from './LiveBroadcastModal';
+
 export default function MediaHub({
   teacherId,
   isStarter,
@@ -497,6 +499,9 @@ export default function MediaHub({
 
 
 
+  const [showYoutubeControls, setShowYoutubeControls] = useState(false);
+  const [showLiveBroadcast, setShowLiveBroadcast] = useState(false);
+
   return (
     <div className="space-y-6">
             <div className="w-full grid grid-cols-5 bg-zinc-900/50 p-1 rounded-xl mb-4">
@@ -512,6 +517,20 @@ export default function MediaHub({
                 <div className="flex justify-between items-center">
                   <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Biblioteca</h3>
               <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowLiveBroadcast(true)} 
+                  className="p-2 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
+                  title="Transmissão ao Vivo"
+                >
+                  <Video size={20} />
+                </button>
+                <button 
+                  onClick={() => setShowYoutubeControls(true)} 
+                  className="p-2 rounded-full bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors"
+                  title="Controles do YouTube"
+                >
+                  <Youtube size={20} />
+                </button>
                 <button 
                   onClick={() => handleCommand('TOGGLE_FULLSCREEN')} 
                   className="p-2 rounded-full bg-blue-500/20 text-blue-500 hover:bg-blue-500/30 transition-colors"
@@ -538,6 +557,54 @@ export default function MediaHub({
               </div>
               <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'MEDIA', undefined, undefined, undefined, currentFolder)} className="hidden" accept="image/*,video/*" multiple />
             </div>
+
+            {showLiveBroadcast && (
+              <LiveBroadcastModal 
+                pairingCode={pairingCode} 
+                onClose={() => setShowLiveBroadcast(false)} 
+              />
+            )}
+
+            {showYoutubeControls && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl w-full max-w-sm space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-white font-bold flex items-center gap-2"><Youtube className="text-red-500" /> Controles YouTube</h3>
+                    <button onClick={() => setShowYoutubeControls(false)} className="text-zinc-500 hover:text-white"><XCircle size={24} /></button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => handleCommand('YOUTUBE_PLAY')} className="bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                      <PlayCircle size={18} /> Play
+                    </button>
+                    <button onClick={() => handleCommand('YOUTUBE_PAUSE')} className="bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                      <XCircle size={18} /> Pause
+                    </button>
+                    <button onClick={() => handleCommand('YOUTUBE_SEEK', -5)} className="bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                      <RotateCcw size={18} className="rotate-180" /> -5s
+                    </button>
+                    <button onClick={() => handleCommand('YOUTUBE_SEEK', 5)} className="bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                      <RotateCcw size={18} /> +5s
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Velocidade</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[0.5, 1, 1.5, 2].map(speed => (
+                        <button 
+                          key={speed}
+                          onClick={() => handleCommand('YOUTUBE_SPEED', speed)}
+                          className="bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg font-bold text-xs"
+                        >
+                          {speed}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {!isStarter && (
               <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl text-center space-y-4 relative overflow-hidden mb-6">

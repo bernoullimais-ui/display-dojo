@@ -79,7 +79,7 @@ export default function ScoreboardControl({
                     </label>
                     <input 
                       type="text" 
-                      placeholder="Nome (Equipe)" 
+                      placeholder={sport === 'karate' ? 'VERMELHO' : 'AZUL'} 
                       className={`w-full border rounded-xl p-3 text-sm outline-none transition-colors ${sport === 'karate' ? 'bg-red-950/30 border-red-900/50 focus:border-red-500' : 'bg-blue-950/30 border-blue-900/50 focus:border-blue-500'}`}
                       value={scoreboardConfig.blueName}
                       onChange={(e) => updateScoreboardConfig('blueName', e.target.value)}
@@ -91,7 +91,7 @@ export default function ScoreboardControl({
                     </label>
                     <input 
                       type="text" 
-                      placeholder="Nome (Equipe)" 
+                      placeholder={sport === 'karate' ? 'AZUL' : 'BRANCO'} 
                       className={`w-full border rounded-xl p-3 text-sm outline-none transition-colors ${sport === 'karate' ? 'bg-blue-950/30 border-blue-900/50 focus:border-blue-500' : 'bg-zinc-800/30 border-zinc-700/50 focus:border-zinc-400'}`}
                       value={scoreboardConfig.whiteName}
                       onChange={(e) => updateScoreboardConfig('whiteName', e.target.value)}

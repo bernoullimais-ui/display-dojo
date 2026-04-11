@@ -11,6 +11,7 @@ import SponsorReports from './components/SponsorReports';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv, PlusCircle, QrCode } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import YouTube from 'react-youtube';
 
 import { MediaItem, TimerPreset, Playlist, DojoSettings, ScheduleItem } from './types';
 import RemoteControl from './components/RemoteControl';
@@ -62,7 +63,11 @@ export default function App() {
   const [isFullscreenMedia, setIsFullscreenMedia] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(50);
+  const youtubePlayerRef = useRef<any>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [isLiveBroadcasting, setIsLiveBroadcasting] = useState(false);
+  const liveStreamRef = useRef<HTMLVideoElement>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
   useEffect(() => {
     const handleInteraction = () => {
@@ -207,6 +212,36 @@ export default function App() {
       setIsLoadingSettings(false);
     };
     fetchData();
+
+    // Real-time subscriptions for TV to keep data in sync
+    const settingsChannel = supabase.channel('tv_settings_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dojo_settings', filter: `teacher_id=eq.${teacherId}` }, (payload) => {
+        const data = payload.new as any;
+        if (data) {
+          setDojoSettings(prev => ({ ...prev, ...data }));
+        }
+      })
+      .subscribe();
+
+    const mediaChannel = supabase.channel('tv_media_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'media', filter: `teacher_id=eq.${teacherId}` }, async () => {
+        const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
+        if (mediaData) setMediaList(mediaData);
+      })
+      .subscribe();
+
+    const schedulesChannel = supabase.channel('tv_schedules_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedules', filter: `teacher_id=eq.${teacherId}` }, async () => {
+        const { data: scheduleData } = await supabase.from('schedules').select('*').eq('teacher_id', teacherId);
+        if (scheduleData) setSchedules(scheduleData);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(settingsChannel);
+      supabase.removeChannel(mediaChannel);
+      supabase.removeChannel(schedulesChannel);
+    };
   }, [teacherId, viewMode, pairingCode]);
 
   useEffect(() => {
@@ -276,6 +311,33 @@ export default function App() {
         if (cmd.type === 'TOGGLE_MUTE') setIsMuted(cmd.payload);
         if (cmd.type === 'SET_VOLUME') setVolume(cmd.payload);
         
+        const sendYoutubeCommand = (func: string, args: any[] = []) => {
+          try {
+            if (youtubePlayerRef.current && typeof youtubePlayerRef.current[func] === 'function') {
+              youtubePlayerRef.current[func](...args);
+            } else {
+              const iframe = document.querySelector('iframe[src*="youtube.com"]') as HTMLIFrameElement;
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args }), '*');
+              }
+            }
+          } catch (e) {
+            console.error('Error sending youtube command:', e);
+          }
+        };
+
+        if (cmd.type === 'YOUTUBE_PLAY') sendYoutubeCommand('playVideo');
+        if (cmd.type === 'YOUTUBE_PAUSE') sendYoutubeCommand('pauseVideo');
+        if (cmd.type === 'YOUTUBE_SEEK') {
+          try {
+            const currentTime = youtubePlayerRef.current?.getCurrentTime ? youtubePlayerRef.current.getCurrentTime() : 0;
+            sendYoutubeCommand('seekTo', [currentTime + cmd.payload, true]);
+          } catch (e) {
+            console.error('Error seeking youtube:', e);
+          }
+        }
+        if (cmd.type === 'YOUTUBE_SPEED') sendYoutubeCommand('setPlaybackRate', [cmd.payload]);
+
         if (cmd.type === 'SCOREBOARD_SET_NAMES') {
           setScoreboardConfig(prev => ({
             ...prev,
@@ -303,7 +365,74 @@ export default function App() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${pairingCode}` }, handleCommandUpdate)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // WebRTC Signaling Channel
+    const rtcChannel = supabase.channel(`webrtc-${pairingCode}`);
+    
+    rtcChannel.on('broadcast', { event: 'signal' }, async (payload) => {
+      const data = payload.payload;
+      
+      if (data.type === 'offer' && data.target === 'tv') {
+        setIsLiveBroadcasting(true);
+        setIsTimerActive(false);
+        setIsScoreboardActive(false);
+        setActiveMedia(null);
+        setActiveManualPlaylist(null);
+
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+        peerConnectionRef.current = pc;
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate) {
+            rtcChannel.send({
+              type: 'broadcast',
+              event: 'signal',
+              payload: { type: 'candidate', candidate: e.candidate, target: 'remote' }
+            });
+          }
+        };
+
+        pc.ontrack = (e) => {
+          if (liveStreamRef.current) {
+            liveStreamRef.current.srcObject = e.streams[0];
+          }
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        rtcChannel.send({
+          type: 'broadcast',
+          event: 'signal',
+          payload: { type: 'answer', sdp: answer, target: 'remote' }
+        });
+
+      } else if (data.type === 'candidate' && data.target === 'tv') {
+        const pc = peerConnectionRef.current;
+        if (pc) {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      } else if (data.type === 'stop' && data.target === 'tv') {
+        setIsLiveBroadcasting(false);
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.close();
+          peerConnectionRef.current = null;
+        }
+      }
+    }).subscribe();
+
+    return () => { 
+      supabase.removeChannel(channel); 
+      supabase.removeChannel(rtcChannel);
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+    };
   }, [teacherId, pairingCode]);
 
   const sendRemoteCommand = async (targetTvId: string, commandType: string, payload?: any) => {
@@ -354,9 +483,20 @@ export default function App() {
     return schedules.filter(s => {
       const start = s.start_time.substring(0, 5);
       const end = s.end_time.substring(0, 5);
-      return s.day_of_week === currentDay && 
-             currentTimeStr >= start && 
-             currentTimeStr <= end;
+      const spansMidnight = start > end;
+
+      if (spansMidnight) {
+        // Active on the start day from start_time to 23:59
+        if (s.day_of_week === currentDay && currentTimeStr >= start) return true;
+        // Active on the next day from 00:00 to end_time
+        const nextDay = (s.day_of_week + 1) % 7;
+        if (nextDay === currentDay && currentTimeStr <= end) return true;
+        return false;
+      } else {
+        return s.day_of_week === currentDay && 
+               currentTimeStr >= start && 
+               currentTimeStr <= end;
+      }
     });
   }, [schedules, isTimerActive, activeMedia, activeManualPlaylist, currentClock]);
 
@@ -447,20 +587,66 @@ export default function App() {
     };
   }, [currentScheduledMedia, activePlaylistMedia.length, dojoSettings.timer_config?.imageDuration]);
 
-  const getYouTubeEmbedUrl = (url: string, muted: boolean, loop: boolean) => {
+  const getYouTubeVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
-    const muteParam = muted ? '1' : '0';
-    const loopParam = loop ? '1' : '0';
-    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=${muteParam}&loop=${loopParam}&playlist=${match[2]}` : null;
+    return (match && match[2].length === 11) ? match[2] : null;
   };
 
   const renderMedia = (media: MediaItem, isScheduled: boolean) => {
     const shouldLoop = !isScheduled || activePlaylistMedia.length <= 1;
-    const youtubeUrl = getYouTubeEmbedUrl(media.url, isMuted, shouldLoop);
+    const youtubeId = getYouTubeVideoId(media.url);
     
-    if (youtubeUrl) {
-      return <iframe src={youtubeUrl} className="w-full h-full border-0" allow="autoplay; encrypted-media" allowFullScreen />;
+    if (youtubeId) {
+      return (
+        <YouTube
+          videoId={youtubeId}
+          className="w-full h-full"
+          iframeClassName="w-full h-full border-0"
+          opts={{
+            width: '100%',
+            height: '100%',
+            playerVars: {
+              autoplay: 1,
+              mute: isMuted ? 1 : 0,
+              loop: shouldLoop ? 1 : 0,
+              playlist: shouldLoop ? youtubeId : undefined,
+              controls: 0,
+              modestbranding: 1,
+              rel: 0,
+              enablejsapi: 1,
+              origin: window.location.origin
+            }
+          }}
+          onReady={(event) => {
+            try {
+              youtubePlayerRef.current = event.target;
+              if (isMuted) event.target.mute();
+              else event.target.unMute();
+              event.target.setVolume(volume);
+              
+              // Force play as soon as player is ready
+              setTimeout(() => {
+                try {
+                  if (youtubePlayerRef.current && typeof youtubePlayerRef.current.playVideo === 'function') {
+                    const iframe = youtubePlayerRef.current.getIframe();
+                    if (iframe) {
+                      youtubePlayerRef.current.playVideo();
+                    }
+                  }
+                } catch (e) {
+                  // Ignore error if player was unmounted before timeout
+                }
+              }, 100);
+            } catch (e) {
+              console.error('Error in youtube onReady:', e);
+            }
+          }}
+          onError={(event) => {
+            console.error('YouTube Player Error:', event.data);
+          }}
+        />
+      );
     }
     if (media.type === 'video') {
       return (
@@ -605,7 +791,19 @@ export default function App() {
 
                 <div className="w-full h-full mx-auto flex flex-col items-center justify-center relative">
                   {/* Display Logic */}
-                  {isScoreboardActive ? (
+                  {isLiveBroadcasting ? (
+                    <div className="absolute inset-0 z-50 bg-black flex items-center justify-center">
+                      <video 
+                        ref={liveStreamRef} 
+                        autoPlay 
+                        playsInline 
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute top-8 right-8 bg-red-600 text-white text-2xl font-black px-6 py-2 rounded-full animate-pulse flex items-center gap-3 shadow-2xl shadow-red-600/50">
+                        <div className="w-4 h-4 bg-white rounded-full"></div> AO VIVO
+                      </div>
+                    </div>
+                  ) : isScoreboardActive ? (
                     <div className="w-full h-full flex items-center justify-center">
                       <Scoreboard 
                         externalCommand={remoteCommand} 

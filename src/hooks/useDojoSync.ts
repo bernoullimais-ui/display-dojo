@@ -9,7 +9,7 @@ const defaultPresets: TimerPreset[] = [
   { id: '4', name: 'Newaza', config: { prepTime: 10, workTime: 120, restTime: 30, cycles: 6, prepLabel: 'PREPARAÇÃO', workLabel: 'NEWAZA', restLabel: 'DESCANSO' } }
 ];
 
-export function useDojoSync(teacherId: string, handleCommand: (type: string, payload?: any) => void) {
+export function useDojoSync(teacherId: string, handleCommand: (type: string, payload?: any, targetTvId?: string) => void) {
   const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
   const [localConfig, setLocalConfig] = useState({
     prepTime: 10, workTime: 60, restTime: 10, cycles: 10,
@@ -160,17 +160,36 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
   };
 
   const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category' | 'sport', value: string) => {
-    const newConfig = { ...scoreboardConfig, [field]: value };
+    let newConfig = { ...scoreboardConfig, [field]: value };
+    
+    if (field === 'sport') {
+      const isOldKarate = scoreboardConfig.sport === 'karate';
+      const isNewKarate = value === 'karate';
+      
+      if (isOldKarate && !isNewKarate) {
+        if (newConfig.blueName === 'VERMELHO') newConfig.blueName = '';
+        if (newConfig.whiteName === 'AZUL') newConfig.whiteName = '';
+      } else if (!isOldKarate && isNewKarate) {
+        if (newConfig.blueName === 'AZUL') newConfig.blueName = '';
+        if (newConfig.whiteName === 'BRANCO') newConfig.whiteName = '';
+      }
+    }
+
     setScoreboardConfig(newConfig);
     
     if (field === 'category') {
       handleCommand('SCOREBOARD_SET_CATEGORY', value);
     } else if (field === 'sport') {
       handleCommand('SCOREBOARD_SET_SPORT', value);
+      // Also broadcast name changes if they were cleared
+      handleCommand('SCOREBOARD_SET_NAMES', { 
+        blue: newConfig.blueName,
+        white: newConfig.whiteName
+      });
     } else {
       handleCommand('SCOREBOARD_SET_NAMES', { 
-        blue: field === 'blueName' ? value : scoreboardConfig.blueName,
-        white: field === 'whiteName' ? value : scoreboardConfig.whiteName
+        blue: newConfig.blueName,
+        white: newConfig.whiteName
       });
     }
     
@@ -202,6 +221,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
   const updatePlaylists = async (newPlaylists: Playlist[]) => {
     const newSettings = { ...dojoSettings, playlists: newPlaylists };
     setDojoSettings(newSettings);
+    handleCommand('SETTINGS_UPDATE', newSettings, 'ALL');
     if (supabase && teacherId) {
       await supabase.from('dojo_settings').update({ playlists: newPlaylists }).eq('teacher_id', teacherId);
     }
@@ -211,6 +231,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     const newTvPlaylists = { ...(dojoSettings.tv_playlists || {}), [tvId]: playlistId };
     const newSettings = { ...dojoSettings, tv_playlists: newTvPlaylists };
     setDojoSettings(newSettings);
+    handleCommand('SETTINGS_UPDATE', newSettings, tvId);
     if (supabase && teacherId) {
       await supabase.from('dojo_settings').update({ tv_playlists: newTvPlaylists }).eq('teacher_id', teacherId);
     }

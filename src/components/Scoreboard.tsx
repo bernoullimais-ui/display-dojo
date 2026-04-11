@@ -229,6 +229,9 @@ export default function Scoreboard({
         matchTimerRef.current = setInterval(() => {
           setMatchTime(prev => {
             if (prev <= 1) {
+              if (osaekomiActive) {
+                return 0; // Don't stop match if osaekomi is active
+              }
               setIsMatchRunning(false);
               playWhistle();
               return 0;
@@ -246,7 +249,18 @@ export default function Scoreboard({
     return () => {
       if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     };
-  }, [isMatchRunning, matchTime, isGoldenScore, isMuted, volume]);
+  }, [isMatchRunning, matchTime, isGoldenScore, isMuted, volume, osaekomiActive]);
+
+  // Handle end of match when Osaekomi finishes after time is up
+  useEffect(() => {
+    if (matchTime === 0 && !osaekomiActive && isMatchRunning) {
+      const hasIppon = blueScore.ippon >= 1 || whiteScore.ippon >= 1 || blueScore.wazaari >= 2 || whiteScore.wazaari >= 2;
+      setIsMatchRunning(false);
+      if (!hasIppon) {
+        playWhistle();
+      }
+    }
+  }, [matchTime, osaekomiActive, isMatchRunning, blueScore, whiteScore]);
 
   // Re-evaluate winner on score change or time end
   useEffect(() => {
@@ -339,8 +353,15 @@ export default function Scoreboard({
   }, [osaekomiActive, winner]);
 
   // Osaekomi Auto-Scoring
+  const lastScoredTimeRef = useRef(0);
+
   useEffect(() => {
-    if (!osaekomiActive) return;
+    if (!osaekomiActive) {
+      lastScoredTimeRef.current = 0;
+      return;
+    }
+
+    if (osaekomiTime === lastScoredTimeRef.current) return;
 
     const activePlayer = osaekomiActive;
     const currentScore = activePlayer === 'blue' ? blueScore : whiteScore;
@@ -354,18 +375,19 @@ export default function Scoreboard({
     };
 
     if (osaekomiTime === 5) {
+      lastScoredTimeRef.current = 5;
       updateScore(activePlayer, s => ({ yuko: s.yuko + 1 }));
     } else if (osaekomiTime === 10) {
+      lastScoredTimeRef.current = 10;
+      updateScore(activePlayer, s => ({ wazaari: s.wazaari + 1, yuko: Math.max(0, s.yuko - 1) }));
       if (currentScore.wazaari >= 1) {
         // Waza-ari-awasete-ippon
-        updateScore(activePlayer, s => ({ ippon: s.ippon + 1, wazaari: Math.max(0, s.wazaari - 1) }));
         playIpponSound();
         setOsaekomiActive(null);
         setOsaekomiTime(0);
-      } else {
-        updateScore(activePlayer, s => ({ wazaari: s.wazaari + 1, yuko: Math.max(0, s.yuko - 1) }));
       }
     } else if (osaekomiTime === 20) {
+      lastScoredTimeRef.current = 20;
       // Ippon
       updateScore(activePlayer, s => ({ ippon: s.ippon + 1, wazaari: Math.max(0, s.wazaari - 1) }));
       playIpponSound();
