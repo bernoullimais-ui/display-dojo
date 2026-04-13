@@ -20,7 +20,7 @@ interface MediaHubProps {
   schedules: ScheduleItem[];
   isUploading: boolean;
   setIsUploading: React.Dispatch<React.SetStateAction<boolean>>;
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, mode?: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST', onLogoUpload?: (url: string) => void, onAudioUpload?: (mode: string, url: string) => void, sponsorName?: string, folderName?: string | null) => Promise<void>;
+  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, mode?: 'MEDIA' | 'LOGO', onLogoUpload?: (url: string) => void, sponsorName?: string, folderName?: string | null) => Promise<void>;
   deleteMedia: (id: string, url: string) => Promise<void>;
   addSchedule: (schedule: any) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
@@ -81,7 +81,7 @@ export default function MediaHub({
   const allFolders = Array.from(new Set([
     ...(dojoSettings.media_folders || []),
     ...mediaList
-      .filter(m => isPro ? true : m.teacher_id !== '00000000-0000-0000-0000-000000000000')
+      .filter(m => isPro ? true : (m.teacher_id !== '00000000-0000-0000-0000-000000000000' || m.name.startsWith('Áudios/')))
       .map(m => {
         const parts = m.name.split('/');
         if (parts.length > 1) {
@@ -105,7 +105,7 @@ export default function MediaHub({
     : [];
 
   const currentFolderMedia = mediaList.filter(m => {
-    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/')) {
+    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/') && !m.name.startsWith('Áudios/')) {
       return false;
     }
     if (!currentFolder) return !m.name.includes('/');
@@ -422,18 +422,18 @@ export default function MediaHub({
         setIsUploading(false);
         return alert('Adição de vídeos disponível a partir do plano PRÓ.');
       }
-      if (!isBusiness && currentVideos >= 2) {
+      if (!isBusiness && currentVideos >= 4) {
         setIsUploading(false);
-        return alert('Limite de 2 vídeos atingido no plano PRÓ.');
+        return alert('Limite de 4 vídeos atingido no plano PRÓ.');
       }
     } else {
       if (!isPro && currentImages >= 3) {
         setIsUploading(false);
         return alert('Limite de 3 imagens atingido no plano STARTER.');
       }
-      if (isPro && !isBusiness && currentImages >= 6) {
+      if (isPro && !isBusiness && currentImages >= 20) {
         setIsUploading(false);
-        return alert('Limite de 6 imagens atingido no plano PRÓ.');
+        return alert('Limite de 20 imagens atingido no plano PRÓ.');
       }
     }
 
@@ -520,11 +520,22 @@ export default function MediaHub({
                   <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Biblioteca</h3>
               <div className="flex gap-2">
                 <button 
-                  onClick={() => setShowLiveBroadcast(true)} 
-                  className="p-2 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
-                  title="Transmissão ao Vivo"
+                  onClick={() => {
+                    if (isBusiness) {
+                      setShowLiveBroadcast(true);
+                    } else {
+                      alert('A Transmissão ao Vivo é um recurso exclusivo do Plano Business.');
+                    }
+                  }} 
+                  className={`p-2 rounded-full transition-colors shadow-lg relative ${isBusiness ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-600/20' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`}
+                  title={isBusiness ? "Transmissão ao Vivo" : "Transmissão ao Vivo (Exclusivo Plano Business)"}
                 >
                   <Video size={20} />
+                  {!isBusiness && (
+                    <div className="absolute -top-1 -right-1 bg-zinc-900 rounded-full p-0.5">
+                      <Lock size={10} className="text-amber-500" />
+                    </div>
+                  )}
                 </button>
                 <button 
                   onClick={() => setShowYoutubeControls(true)} 
@@ -553,11 +564,11 @@ export default function MediaHub({
                 >
                   <Plus size={20} />
                 </button>
-                <button onClick={() => isStarter ? fileInputRef.current?.click() : alert('Recurso STARTER')} disabled={isUploading} className="bg-blue-600 p-2 rounded-full text-white">
+                <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-blue-600 p-2 rounded-full text-white">
                   {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
                 </button>
               </div>
-              <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'MEDIA', undefined, undefined, undefined, currentFolder)} className="hidden" accept="image/*,video/*" multiple />
+              <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'MEDIA', undefined, undefined, currentFolder)} className="hidden" accept="image/*,video/*,audio/*" multiple />
             </div>
 
             {showLiveBroadcast && (
@@ -618,7 +629,7 @@ export default function MediaHub({
                 </div>
                 <h3 className="text-xl font-bold text-white">Recurso STARTER</h3>
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto">
-                  O Hub de Mídias está disponível a partir do Plano STARTER. Playlists, Agenda e Letreiro Digital no Plano PRÓ.
+                  O Hub de Mídias está disponível a partir do Plano STARTER. Playlists, Agenda e Letreiro Digital no Plano PRÓ. O upload de áudios é gratuito!
                 </p>
                 <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
                   Fazer Upgrade
@@ -657,63 +668,73 @@ export default function MediaHub({
               </div>
             )}
 
-            {isStarter && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2">
                   <button 
                     onClick={() => setCurrentFolder(null)}
                     className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${!currentFolder ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
                   >
                     Tudo
                   </button>
-                  {rootFolders.map(folder => (
-                    <div key={folder} className="flex items-center group">
-                      {editingFolder === folder ? (
-                        <div className="flex items-center">
-                          <input 
-                            type="text" 
-                            value={editFolderName}
-                            onChange={(e) => setEditFolderName(e.target.value)}
-                            className="bg-black border border-zinc-800 rounded-l-xl px-3 py-1.5 text-xs outline-none focus:border-blue-500 w-24"
-                            autoFocus
-                          />
-                          <button 
-                            onClick={() => handleRenameFolder(folder)}
-                            className="px-2 py-1.5 bg-blue-600 text-white text-xs hover:bg-blue-700"
-                          >
-                            <Check size={14} />
-                          </button>
-                          <button 
-                            onClick={() => setEditingFolder(null)}
-                            className="px-2 py-1.5 rounded-r-xl bg-zinc-800 text-zinc-400 text-xs hover:bg-zinc-700"
-                          >
-                            <XCircle size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <button 
-                            onClick={() => setCurrentFolder(folder)}
-                            className={`px-4 py-2 rounded-l-xl text-xs font-bold whitespace-nowrap transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
-                          >
-                            {folder}
-                          </button>
-                          <button 
-                            onClick={() => { setEditingFolder(folder); setEditFolderName(folder); }}
-                            className={`px-2 py-2 text-xs transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'}`}
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteFolder(folder)}
-                            className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                  {rootFolders.map(folder => {
+                    const isGlobalFolder = mediaList.some(m => m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.startsWith(folder + '/'));
+                    
+                    return (
+                      <div key={folder} className="flex items-center group">
+                        {editingFolder === folder ? (
+                          <div className="flex items-center">
+                            <input 
+                              type="text" 
+                              value={editFolderName}
+                              onChange={(e) => setEditFolderName(e.target.value)}
+                              className="bg-black border border-zinc-800 rounded-l-xl px-3 py-1.5 text-xs outline-none focus:border-blue-500 w-24"
+                              autoFocus
+                            />
+                            <button 
+                              onClick={() => handleRenameFolder(folder)}
+                              className="px-2 py-1.5 bg-blue-600 text-white text-xs hover:bg-blue-700"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button 
+                              onClick={() => setEditingFolder(null)}
+                              className="px-2 py-1.5 rounded-r-xl bg-zinc-800 text-zinc-400 text-xs hover:bg-zinc-700"
+                            >
+                              <XCircle size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => setCurrentFolder(folder)}
+                              className={`px-4 py-2 ${isGlobalFolder ? 'rounded-xl' : 'rounded-l-xl'} text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1.5 ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+                            >
+                              {folder}
+                              {isGlobalFolder && (
+                                <span className="bg-white/20 px-1 rounded-[4px] text-[7px] uppercase tracking-tighter">Global</span>
+                              )}
+                            </button>
+                            {!isGlobalFolder && (
+                              <>
+                                <button 
+                                  onClick={() => { setEditingFolder(folder); setEditFolderName(folder); }}
+                                  className={`px-2 py-2 text-xs transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'}`}
+                                >
+                                  <Edit size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteFolder(folder)}
+                                  className={`px-2 py-2 rounded-r-xl text-xs transition-colors ${currentFolder === folder || currentFolder?.startsWith(folder + '/') ? 'bg-blue-700 text-white hover:bg-blue-800' : 'bg-zinc-900 text-zinc-500 hover:bg-red-500/20 hover:text-red-500'}`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                   <button 
                     onClick={() => setShowAddFolder(true)}
                     className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-400 hover:bg-zinc-800 text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1"
@@ -889,6 +910,10 @@ export default function MediaHub({
                       >
                         {item.type === 'image' ? (
                           <img src={item.url} className="w-full h-full object-cover opacity-70" />
+                        ) : item.type === 'audio' ? (
+                          <div className="w-full h-full relative bg-zinc-900 opacity-70 flex items-center justify-center">
+                            <Volume2 className="text-zinc-600" size={40} />
+                          </div>
                         ) : isYouTube ? (
                           <div className="w-full h-full relative bg-zinc-900 opacity-70">
                             {youtubeVideoId ? (
@@ -929,7 +954,12 @@ export default function MediaHub({
                             </button>
                           </div>
                         )}
-                        {!isBatchMode && item.teacher_id !== 'GLOBAL' && (
+                        {item.teacher_id === '00000000-0000-0000-0000-000000000000' && (
+                          <div className="absolute top-2 right-2 bg-blue-600/80 px-2 py-0.5 rounded text-[8px] font-bold text-white uppercase tracking-tighter z-10">
+                            Global
+                          </div>
+                        )}
+                        {!isBatchMode && item.teacher_id !== '00000000-0000-0000-0000-000000000000' && (
                           <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
                             <button onClick={() => { setMovingMedia(item); setMoveDestination(currentFolder || ''); }} className="bg-black/60 text-blue-400 p-2 rounded-full active:scale-95 transition-transform">
                               <FolderInput size={18} />
@@ -972,7 +1002,6 @@ export default function MediaHub({
                   })}
                 </div>
               </div>
-            )}
           </div>
         )}
 
@@ -1205,6 +1234,30 @@ export default function MediaHub({
                         ))}
                       </div>
 
+                      {playlistFolder && (
+                        <div className="flex items-center gap-2 bg-blue-500/10 p-3 rounded-xl border border-blue-500/20 mb-2">
+                          <input 
+                            type="checkbox" 
+                            id="include-folder"
+                            checked={(editingPlaylist.folders || []).includes(playlistFolder)}
+                            onChange={(e) => {
+                              setEditingPlaylist(prev => {
+                                if (!prev) return prev;
+                                const currentFolders = prev.folders || [];
+                                const newFolders = e.target.checked 
+                                  ? [...currentFolders, playlistFolder]
+                                  : currentFolders.filter(f => f !== playlistFolder);
+                                return { ...prev, folders: newFolders };
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-500 focus:ring-blue-600 focus:ring-offset-zinc-900"
+                          />
+                          <label htmlFor="include-folder" className="text-xs text-blue-400 font-medium cursor-pointer">
+                            Incluir pasta inteira (mídias futuras serão adicionadas automaticamente)
+                          </label>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-2">
                         {playlistFolder && (
                           <div 
@@ -1258,6 +1311,10 @@ export default function MediaHub({
                             >
                               {m.type === 'image' ? (
                                 <img src={m.url} className="w-full h-full object-cover" />
+                              ) : m.type === 'audio' ? (
+                                <div className="w-full h-full relative bg-zinc-800 flex items-center justify-center">
+                                  <Volume2 size={20} className="text-zinc-500" />
+                                </div>
                               ) : isYouTube ? (
                                 <div className="w-full h-full relative bg-zinc-800">
                                   {youtubeVideoId && (

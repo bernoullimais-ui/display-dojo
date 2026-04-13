@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Plus, Upload, Trash2, Video, Youtube, PlayCircle, Image as ImageIcon, X, Edit, XCircle, FolderInput, Check, CheckSquare, Folder, FolderUp } from 'lucide-react';
+import { Loader2, Plus, Upload, Trash2, Video, Youtube, PlayCircle, Image as ImageIcon, X, Edit, XCircle, FolderInput, Check, CheckSquare, Folder, FolderUp, Volume2 } from 'lucide-react';
 
 interface MediaItem {
   id: string;
   name: string;
   url: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   sponsor_name?: string;
   teacher_id?: string;
 }
@@ -48,7 +48,22 @@ export default function GlobalMediaManager() {
       .select('*')
       .eq('teacher_id', '00000000-0000-0000-0000-000000000000');
       
-    if (mediaData) setMediaList(mediaData);
+    if (mediaData) {
+      const mappedMedia = mediaData.map(m => {
+        if (m.type === 'video' && (
+          m.url.toLowerCase().includes('.mp3') || 
+          m.url.toLowerCase().includes('.wav') || 
+          m.url.toLowerCase().includes('.m4a') ||
+          m.name.toLowerCase().endsWith('.mp3') ||
+          m.name.toLowerCase().endsWith('.wav') ||
+          m.name.toLowerCase().endsWith('.m4a')
+        )) {
+          return { ...m, type: 'audio' as const };
+        }
+        return m;
+      });
+      setMediaList(mappedMedia);
+    }
 
     // Fetch global settings
     const { data: settingsData } = await supabase
@@ -436,7 +451,7 @@ export default function GlobalMediaManager() {
           .from('dojo-media')
           .getPublicUrl(filePath);
 
-        const type = file.type.startsWith('video') ? 'video' : 'image';
+        const type = (file.type.startsWith('audio') || file.name.toLowerCase().endsWith('.mp3') || file.name.toLowerCase().endsWith('.wav') || file.name.toLowerCase().endsWith('.m4a')) ? 'audio' : file.type.startsWith('video') ? 'video' : 'image';
         
         if (type === 'video') {
           const thumbBlob = await generateThumbnail(file);
@@ -456,9 +471,9 @@ export default function GlobalMediaManager() {
               updated_at: new Date().toISOString()
             });
         } else if (mode === 'SPONSOR') {
-          newUploadedSponsors.push({ url: publicUrl, type: type as 'image' | 'video' });
+          newUploadedSponsors.push({ url: publicUrl, type: type === 'audio' ? 'video' : type as 'image' | 'video' });
         } else if (mode === 'TIMER_SPONSOR') {
-          newUploadedTimerSponsors.push({ url: publicUrl, type: type as 'image' | 'video' });
+          newUploadedTimerSponsors.push({ url: publicUrl, type: type === 'audio' ? 'video' : type as 'image' | 'video' });
         } else {
           const { data: mediaData, error: dbError } = await supabase
             .from('media')
@@ -466,14 +481,19 @@ export default function GlobalMediaManager() {
               teacher_id: '00000000-0000-0000-0000-000000000000',
               name: currentFolder ? `${currentFolder}/${file.name}` : file.name,
               url: publicUrl,
-              type: type,
+              // Workaround for DB constraint
+              type: type === 'audio' ? 'video' : type,
               sponsor_name: mediaSponsorInput || null
             }])
             .select()
             .single();
 
           if (dbError) throw dbError;
-          if (mediaData) newMediaItems.push(mediaData);
+          if (mediaData) {
+            // Restore audio type for frontend
+            const itemWithCorrectType = type === 'audio' ? { ...mediaData, type: 'audio' } : mediaData;
+            newMediaItems.push(itemWithCorrectType);
+          }
         }
       } catch (error) {
         console.error(`Upload failed for ${file.name}:`, error);
@@ -535,8 +555,9 @@ export default function GlobalMediaManager() {
     
     setIsUploading(true);
     const isYouTube = mediaUrlInput.includes('youtube.com') || mediaUrlInput.includes('youtu.be');
+    const isAudio = mediaUrlInput.match(/\.(mp3|wav|m4a)$/i);
     const isVideo = isYouTube || mediaUrlInput.match(/\.(mp4|webm|ogg|mov)$|vimeo\.com/i);
-    const type = isVideo ? 'video' : 'image';
+    const type = isAudio ? 'audio' : isVideo ? 'video' : 'image';
     
     let name = 'Mídia Web';
     if (isYouTube) {
@@ -564,14 +585,17 @@ export default function GlobalMediaManager() {
           teacher_id: '00000000-0000-0000-0000-000000000000',
           name: name,
           url: mediaUrlInput,
-          type: type,
+          type: type === 'audio' ? 'video' : type,
           sponsor_name: mediaSponsorInput || null
         }])
         .select()
         .single();
 
       if (dbError) throw dbError;
-      if (mediaData) setMediaList(prev => [...prev, mediaData]);
+      if (mediaData) {
+        const itemWithCorrectType = type === 'audio' ? { ...mediaData, type: 'audio' } : mediaData;
+        setMediaList(prev => [...prev, itemWithCorrectType]);
+      }
       
       setMediaUrlInput('');
       setMediaSponsorInput('');
@@ -845,7 +869,7 @@ export default function GlobalMediaManager() {
             >
               {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
             </button>
-            <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'MEDIA')} className="hidden" accept="image/*,video/*" multiple />
+            <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'MEDIA')} className="hidden" accept="image/*,video/*,audio/*" multiple />
           </div>
         </div>
 
@@ -1111,6 +1135,10 @@ export default function GlobalMediaManager() {
                 >
                   {item.type === 'image' ? (
                     <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-50 transition-opacity" />
+                  ) : item.type === 'audio' ? (
+                    <div className="w-full h-full relative bg-zinc-900 opacity-70 group-hover:opacity-50 transition-opacity flex items-center justify-center">
+                      <Volume2 className="text-blue-500" size={40} />
+                    </div>
                   ) : isYouTube ? (
                     <div className="w-full h-full relative bg-zinc-900 opacity-70 group-hover:opacity-50 transition-opacity">
                       {youtubeVideoId ? (

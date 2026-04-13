@@ -2,21 +2,32 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { DojoSettings, TimerPreset, Playlist } from '../types';
 
+const HAJIME_URL = 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/hajime.mp3';
+const MATTE_URL = 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/matte.mp3';
+const SOREMADE_URL = 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/soremade.mp3';
+const KIOTSUKE_URL = 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/kiotsuke.mp3';
+
 const defaultPresets: TimerPreset[] = [
-  { id: '1', name: 'Randori', config: { prepTime: 10, workTime: 300, restTime: 60, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'RANDORI', restLabel: 'DESCANSO' } },
-  { id: '2', name: 'Uchikomi', config: { prepTime: 10, workTime: 60, restTime: 10, cycles: 10, prepLabel: 'PREPARAÇÃO', workLabel: 'UCHIKOMI', restLabel: 'TROCA' } },
-  { id: '3', name: 'Tabata', config: { prepTime: 10, workTime: 20, restTime: 10, cycles: 8, prepLabel: 'PREPARAÇÃO', workLabel: 'TRABALHO', restLabel: 'DESCANSO' } },
-  { id: '4', name: 'Newaza', config: { prepTime: 10, workTime: 120, restTime: 30, cycles: 6, prepLabel: 'PREPARAÇÃO', workLabel: 'NEWAZA', restLabel: 'DESCANSO' } }
+  // ROUNDS Presets
+  { id: '1', name: 'Randori', mode: 'ROUNDS', config: { prepTime: 10, workTime: 300, restTime: 60, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'RANDORI', restLabel: 'DESCANSO', prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  { id: '2', name: 'Kids', mode: 'ROUNDS', config: { prepTime: 10, workTime: 120, restTime: 30, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'KIDS', restLabel: 'DESCANSO', prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  { id: '3', name: 'Ne Waza', mode: 'ROUNDS', config: { prepTime: 10, workTime: 180, restTime: 30, cycles: 6, prepLabel: 'PREPARAÇÃO', workLabel: 'NE WAZA', restLabel: 'DESCANSO', prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  { id: '4', name: 'Uchikomi', mode: 'ROUNDS', config: { prepTime: 10, workTime: 60, restTime: 10, cycles: 10, prepLabel: 'PREPARAÇÃO', workLabel: 'UCHIKOMI', restLabel: 'TROCA', prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  // HIT Presets
+  { id: '5', name: 'Aquecimento', mode: 'HIT', config: { prepTime: 10, workTime: 30, restTime: 10, cycles: 5, prepLabel: 'PREPARAÇÃO', workLabel: 'AQUECIMENTO', restLabel: 'DESCANSO', hitCycles: [], prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  { id: '6', name: 'Força', mode: 'HIT', config: { prepTime: 10, workTime: 45, restTime: 15, cycles: 4, prepLabel: 'PREPARAÇÃO', workLabel: 'FORÇA', restLabel: 'DESCANSO', hitCycles: [], prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  { id: '7', name: 'Velocidade', mode: 'HIT', config: { prepTime: 10, workTime: 20, restTime: 10, cycles: 8, prepLabel: 'PREPARAÇÃO', workLabel: 'VELOCIDADE', restLabel: 'DESCANSO', hitCycles: [], prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } },
+  { id: '8', name: 'Habilidade', mode: 'HIT', config: { prepTime: 10, workTime: 60, restTime: 20, cycles: 4, prepLabel: 'PREPARAÇÃO', workLabel: 'HABILIDADE', restLabel: 'DESCANSO', hitCycles: [], prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL } }
 ];
 
 export function useDojoSync(teacherId: string, handleCommand: (type: string, payload?: any, targetTvId?: string) => void) {
-  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
+  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'DOJO TV', logo_url: 'https://picsum.photos/seed/dojotv/200/200' });
   const [localConfig, setLocalConfig] = useState({
+    name: '',
     prepTime: 10, workTime: 60, restTime: 10, cycles: 10,
     prepColor: '#eab308', workColor: '#22c55e', restColor: '#ef4444',
     prepLabel: 'PREPARAÇÃO', workLabel: 'TRABALHO', restLabel: 'DESCANSO',
-    prepAudio: null as string | null, workAudio: null as string | null, restAudio: null as string | null,
-    ttsEnabled: false
+    prepAudioUrl: KIOTSUKE_URL, workAudioUrl: HAJIME_URL, restAudioUrl: MATTE_URL, finishedAudioUrl: SOREMADE_URL
   });
   const [scoreboardConfig, setScoreboardConfig] = useState({
     athlete1Name: 'ATLETA 1', athlete2Name: 'ATLETA 2',
@@ -92,7 +103,15 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     const newSettings = { ...dojoSettings, presets: newPresets };
     setDojoSettings(newSettings);
     
-    await supabase.from('dojo_settings').update({ presets: newPresets }).eq('teacher_id', teacherId);
+    // Update current config to reflect changes immediately
+    const newConfig = { ...localConfig, ...preset.config, name: preset.name };
+    setLocalConfig(newConfig);
+    handleCommand('CONFIG_UPDATE', newConfig);
+    
+    await supabase.from('dojo_settings').update({ 
+      presets: newPresets,
+      timer_config: newConfig
+    }).eq('teacher_id', teacherId);
   };
 
   const deletePreset = async (id: string) => {
@@ -108,6 +127,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
   const updateConfig = async (field: string, value: any) => {
     const newConfig = { ...localConfig, [field]: value };
     setLocalConfig(newConfig);
+    setDojoSettings(prev => ({ ...prev, timer_config: newConfig }));
     handleCommand('CONFIG_UPDATE', newConfig);
     
     if (supabase && teacherId) {
@@ -118,6 +138,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
   const handleConfigChange = async (newSettings: Partial<typeof localConfig>) => {
     const newConfig = { ...localConfig, ...newSettings };
     setLocalConfig(newConfig);
+    setDojoSettings(prev => ({ ...prev, timer_config: newConfig }));
     handleCommand('CONFIG_UPDATE', newConfig);
     
     if (supabase && teacherId) {
@@ -125,17 +146,10 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     }
   };
 
-  const updateColor = async (field: string, value: string) => {
-    updateConfig(field, value);
-  };
-
-  const updateLabel = async (field: string, value: string) => {
-    updateConfig(field, value);
-  };
-
   const updateScoreboard = async (field: string, value: any) => {
     const newConfig = { ...scoreboardConfig, [field]: value };
     setScoreboardConfig(newConfig);
+    setDojoSettings(prev => ({ ...prev, scoreboard_config: newConfig }));
     handleCommand('SCOREBOARD_UPDATE', newConfig);
     
     if (supabase && teacherId) {
@@ -149,14 +163,6 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     const newValue = increment ? currentValue + 1 : Math.max(0, currentValue - 1);
     
     await updateScoreboard(field, newValue);
-  };
-
-  const removeAudio = async (field: string) => {
-    updateConfig(field, '');
-  };
-
-  const toggleTTS = async (val: boolean) => {
-    updateConfig('useTTS', val);
   };
 
   const updateScoreboardConfig = async (field: 'blueName' | 'whiteName' | 'category' | 'sport', value: string) => {
@@ -176,6 +182,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     }
 
     setScoreboardConfig(newConfig);
+    setDojoSettings(prev => ({ ...prev, scoreboard_config: newConfig }));
     
     if (field === 'category') {
       handleCommand('SCOREBOARD_SET_CATEGORY', value);
@@ -201,6 +208,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
   const updateTickerConfig = async (field: 'text' | 'active', value: string | boolean) => {
     const newConfig = { ...tickerConfig, [field]: value };
     setTickerConfig(newConfig);
+    setDojoSettings(prev => ({ ...prev, ticker_config: newConfig }));
     handleCommand('TICKER_UPDATE', newConfig);
     
     if (supabase && teacherId) {
@@ -211,6 +219,7 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
   const updateSponsorsConfig = async (field: keyof typeof sponsorsConfig, value: any) => {
     const newConfig = { ...sponsorsConfig, [field]: value };
     setSponsorsConfig(newConfig);
+    setDojoSettings(prev => ({ ...prev, sponsors_config: newConfig }));
     handleCommand('SPONSORS_UPDATE', newConfig);
     
     if (supabase && teacherId) {
@@ -252,12 +261,8 @@ export function useDojoSync(teacherId: string, handleCommand: (type: string, pay
     savePreset,
     deletePreset,
     updateConfig,
-    updateColor,
-    updateLabel,
     updateScoreboard,
     handleScoreUpdate,
-    removeAudio,
-    toggleTTS,
     updateScoreboardConfig,
     updateTickerConfig,
     updateSponsorsConfig,

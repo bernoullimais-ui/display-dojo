@@ -2,6 +2,81 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { MediaItem, ScheduleItem } from '../types';
 
+const SYSTEM_TEACHER_ID = '00000000-0000-0000-0000-000000000000';
+
+const GLOBAL_SOUNDS: MediaItem[] = [
+  {
+    id: 'global-sound-1',
+    name: 'Áudios/Beep Curto.mp3',
+    url: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-2',
+    name: 'Áudios/Sino.mp3',
+    url: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-3',
+    name: 'Áudios/Apito.mp3',
+    url: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-4',
+    name: 'Áudios/Gongo.mp3',
+    url: 'https://assets.mixkit.co/active_storage/sfx/1084/1084-preview.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-5',
+    name: 'Áudios/Beep Longo.mp3',
+    url: 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-6',
+    name: 'Áudios/Buzina.mp3',
+    url: 'https://assets.mixkit.co/active_storage/sfx/2803/2803-preview.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-hajime',
+    name: 'Áudios/Hajime.mp3',
+    url: 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/hajime.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-matte',
+    name: 'Áudios/Matte.mp3',
+    url: 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/matte.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-soremade',
+    name: 'Áudios/Soremade.mp3',
+    url: 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/soremade.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  },
+  {
+    id: 'global-sound-kiotsuke',
+    name: 'Áudios/Kiotsuke.mp3',
+    url: 'https://ais-dev-u6fyuyuunarpftzwkkwu4c-22964521808.us-west1.run.app/kiotsuke.mp3',
+    type: 'audio',
+    teacher_id: SYSTEM_TEACHER_ID
+  }
+];
+
 export function useMediaManager(teacherId: string, isStarter: boolean, isPro: boolean, isBusiness: boolean) {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
@@ -14,7 +89,7 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
       const { data: mediaData } = await supabase
         .from('media')
         .select('*')
-        .in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000'])
+        .in('teacher_id', [teacherId, SYSTEM_TEACHER_ID])
         .order('created_at', { ascending: false });
 
       const { data: scheduleData } = await supabase
@@ -22,7 +97,30 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
         .select('*, media:media_id(*)')
         .eq('teacher_id', teacherId);
 
-      if (mediaData) setMediaList(mediaData);
+      // Combine database media with global system sounds
+      const combinedMedia = (mediaData || []).map(m => {
+        // Workaround for DB constraint: if it's stored as video but is an audio file, fix it locally
+        if (m.type === 'video' && (
+          m.url.toLowerCase().includes('.mp3') || 
+          m.url.toLowerCase().includes('.wav') || 
+          m.url.toLowerCase().includes('.m4a') ||
+          m.name.toLowerCase().endsWith('.mp3') ||
+          m.name.toLowerCase().endsWith('.wav') ||
+          m.name.toLowerCase().endsWith('.m4a')
+        )) {
+          return { ...m, type: 'audio' as const };
+        }
+        return m;
+      });
+      
+      // Add global sounds if they don't already exist in the list (by URL to avoid duplicates if they were added to DB)
+      GLOBAL_SOUNDS.forEach(sound => {
+        if (!combinedMedia.some(m => m.url === sound.url)) {
+          combinedMedia.push(sound);
+        }
+      });
+
+      setMediaList(combinedMedia);
       if (scheduleData) setSchedules(scheduleData);
     };
 
@@ -76,14 +174,13 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    mode: 'MEDIA' | 'LOGO' | 'PREP' | 'WORK' | 'REST' = 'MEDIA',
+    mode: 'MEDIA' | 'LOGO' = 'MEDIA',
     onLogoUpload?: (url: string) => void,
-    onAudioUpload?: (mode: string, url: string) => void,
     sponsorName?: string,
     folderName?: string | null
   ) => {
     const files = Array.from(e.target.files || []) as File[];
-    if (files.length === 0 || !supabase) return;
+    if (files.length === 0 || !supabase || !teacherId) return;
 
     setIsUploading(true);
     
@@ -93,11 +190,15 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
 
     for (const file of files) {
       if (mode === 'MEDIA') {
-        if (!isStarter) {
-          alert(`Upload de mídias disponível a partir do plano STARTER. Arquivo ${file.name} ignorado.`);
+        let type: 'image' | 'video' | 'audio' = 'image';
+        if (file.type.startsWith('video')) type = 'video';
+        else if (file.type.startsWith('audio') || file.name.toLowerCase().endsWith('.mp3') || file.name.toLowerCase().endsWith('.wav') || file.name.toLowerCase().endsWith('.m4a')) type = 'audio';
+        else if (file.type.startsWith('image')) type = 'image';
+        
+        if (type !== 'audio' && !isStarter) {
+          alert(`Upload de imagens e vídeos disponível a partir do plano STARTER. Arquivo ${file.name} ignorado.`);
           continue;
         }
-        const type = file.type.startsWith('video') ? 'video' : 'image';
 
         if (type === 'video') {
           if (!isPro) {
@@ -120,22 +221,23 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
             continue;
           }
 
-          if (!isBusiness && currentVideos >= 2) {
-            alert(`Limite de 2 vídeos atingido no plano PRÓ. Arquivo ${file.name} ignorado.`);
+          if (!isBusiness && currentVideos >= 4) {
+            alert(`Limite de 4 vídeos atingido no plano PRÓ. Arquivo ${file.name} ignorado.`);
             continue;
           }
           currentVideos++;
-        } else {
+        } else if (type === 'image') {
           if (!isPro && currentImages >= 3) {
             alert(`Limite de 3 imagens atingido no plano STARTER. Arquivo ${file.name} ignorado.`);
             continue;
           }
-          if (isPro && !isBusiness && currentImages >= 6) {
-            alert(`Limite de 6 imagens atingido no plano PRÓ. Arquivo ${file.name} ignorado.`);
+          if (isPro && !isBusiness && currentImages >= 20) {
+            alert(`Limite de 20 imagens atingido no plano PRÓ. Arquivo ${file.name} ignorado.`);
             continue;
           }
           currentImages++;
         }
+        // Audio has no specific count limits for now
       }
 
       try {
@@ -148,9 +250,13 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
           .upload(filePath, file);
 
         if (uploadError) {
+          console.error('Storage Upload Error:', uploadError);
           if (uploadError.message.includes('bucket not found') || uploadError.message.includes('Bucket not found')) {
             alert('ERRO: O bucket "dojo-media" não foi encontrado no seu Supabase.');
             break;
+          } else if (uploadError.message.includes('Payload too large') || (uploadError as any).status === 413) {
+            alert(`O arquivo ${file.name} é muito grande para o plano gratuito.`);
+            continue;
           } else {
             throw uploadError;
           }
@@ -160,9 +266,10 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
           .from('dojo-media')
           .getPublicUrl(filePath);
 
-        const type = file.type.startsWith('video') ? 'video' : 'image';
+        const type: 'image' | 'video' | 'audio' = file.type.startsWith('video') ? 'video' : (file.type.startsWith('audio') || file.name.toLowerCase().endsWith('.mp3') || file.name.toLowerCase().endsWith('.wav') || file.name.toLowerCase().endsWith('.m4a')) ? 'audio' : 'image';
         
-        if (type === 'video') {
+        // Only generate thumbnail for real videos, not audio files mapped to video
+        if (type === 'video' && file.type.startsWith('video')) {
           const thumbBlob = await generateThumbnail(file);
           if (thumbBlob) {
             const thumbPath = `${filePath}_thumb.jpg`;
@@ -172,29 +279,38 @@ export function useMediaManager(teacherId: string, isStarter: boolean, isPro: bo
 
         if (mode === 'LOGO') {
           if (onLogoUpload) onLogoUpload(publicUrl);
-        } else if (['PREP', 'WORK', 'REST'].includes(mode)) {
-          if (onAudioUpload) onAudioUpload(mode, publicUrl);
         } else {
+          // Sanitize filename for database to avoid issues with special characters or length
+          const cleanFileName = file.name
+            .replace(/[/\\]/g, '_') // Remove path separators
+            .substring(0, 100); // Truncate to avoid potential DB column limits
+            
           const { data: mediaData, error: dbError } = await supabase
             .from('media')
             .insert({
               teacher_id: teacherId,
               url: publicUrl,
-              type,
-              name: folderName ? `${folderName}/${file.name}` : file.name,
+              // CRITICAL WORKAROUND: The DB constraint 'media_type_check' likely only allows 'image' and 'video'.
+              // We map 'audio' to 'video' for the DB, but restore it to 'audio' in fetchMediaAndSchedules.
+              type: type === 'audio' ? 'video' : type,
+              name: folderName ? `${folderName}/${cleanFileName}` : cleanFileName,
               sponsor_name: sponsorName || null
             })
             .select()
             .single();
 
-          if (dbError) throw dbError;
+          if (dbError) {
+            console.error('Database Insert Error:', dbError);
+            throw dbError;
+          }
           if (mediaData) {
             newMediaItems.push(mediaData);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(`Upload failed for ${file.name}:`, error);
-        alert(`Erro ao fazer upload do arquivo ${file.name}.`);
+        const errorMessage = error.message || (typeof error === 'string' ? error : 'Erro desconhecido');
+        alert(`FALHA NO UPLOAD: ${file.name}\n\nDetalhes: ${errorMessage}\n\nPor favor, tente novamente ou verifique se o arquivo é válido.`);
       }
     }
 

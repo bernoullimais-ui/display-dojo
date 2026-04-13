@@ -53,18 +53,41 @@ export default function AdminPanel() {
     if (!supabase) return;
     
     // Fetch all dojo_settings
-    const { data, error } = await supabase
+    const { data: dojoData, error: dojoError } = await supabase
       .from('dojo_settings')
       .select('*')
       .neq('teacher_id', '00000000-0000-0000-0000-000000000000');
       
-    if (error) {
-      setError(`Erro do Supabase: ${error.message || JSON.stringify(error)}`);
-      console.error('Supabase error details:', error);
+    if (dojoError) {
+      setError(`Erro do Supabase (dojo_settings): ${dojoError.message || JSON.stringify(dojoError)}`);
+      console.error('Supabase error details:', dojoError);
+      setLoading(false);
+      return;
+    }
+
+    // Try to fetch emails from the public view
+    const { data: emailData, error: emailError } = await supabase
+      .from('user_emails_view')
+      .select('*');
+
+    if (emailError) {
+      console.warn('Could not fetch emails. View might not exist:', emailError);
+      // We don't block the UI, just show users without emails, but we set the error so the admin knows they need to run the SQL
+      setError(`Aviso: Não foi possível carregar os e-mails. Execute o comando SQL abaixo no Supabase para criar a view de e-mails.\nDetalhes: ${emailError.message}`);
+      setUsers(dojoData || []);
     } else {
-      setUsers(data || []);
+      // Merge emails into dojoData
+      const usersWithEmails = (dojoData || []).map(user => {
+        const userEmailRecord = (emailData || []).find(e => e.id === user.teacher_id);
+        return {
+          ...user,
+          email: userEmailRecord?.email || null
+        };
+      });
+      setUsers(usersWithEmails);
       setError('');
     }
+    
     setLoading(false);
   };
 
@@ -210,6 +233,18 @@ WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
                 </pre>
               </>
             )}
+
+            {error.includes('user_emails_view') && (
+              <>
+                <p className="text-sm text-red-400 mt-4">Para ver os e-mails dos usuários, você precisa criar uma View no banco de dados. Acesse o painel do Supabase &gt; SQL Editor e rode o seguinte comando:</p>
+                <pre className="bg-black/50 p-4 rounded-lg text-xs font-mono text-zinc-300 overflow-x-auto">
+{`CREATE OR REPLACE VIEW public.user_emails_view AS
+SELECT id, email FROM auth.users;
+
+GRANT SELECT ON public.user_emails_view TO authenticated;`}
+                </pre>
+              </>
+            )}
           </div>
         )}
 
@@ -239,6 +274,25 @@ WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
 
         {activeTab === 'USERS' && (
           <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex flex-col items-center justify-center">
+                <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">FREE</span>
+                <span className="text-3xl font-black text-white">{users.filter(u => !u.subscription_tier || u.subscription_tier === 'FREE').length}</span>
+              </div>
+              <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl flex flex-col items-center justify-center">
+                <span className="text-blue-500 text-xs font-bold uppercase tracking-wider mb-1">STARTER</span>
+                <span className="text-3xl font-black text-blue-400">{users.filter(u => u.subscription_tier === 'STARTER').length}</span>
+              </div>
+              <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-2xl flex flex-col items-center justify-center">
+                <span className="text-yellow-500 text-xs font-bold uppercase tracking-wider mb-1">PRO</span>
+                <span className="text-3xl font-black text-yellow-400">{users.filter(u => u.subscription_tier === 'PRO').length}</span>
+              </div>
+              <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-2xl flex flex-col items-center justify-center">
+                <span className="text-purple-500 text-xs font-bold uppercase tracking-wider mb-1">BUSINESS</span>
+                <span className="text-3xl font-black text-purple-400">{users.filter(u => u.subscription_tier === 'BUSINESS').length}</span>
+              </div>
+            </div>
+
             <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
               <Search className="text-zinc-500" />
               <input 
@@ -261,6 +315,7 @@ WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
                     <thead className="bg-zinc-950/50 text-zinc-400 text-xs uppercase tracking-widest">
                       <tr>
                         <th className="p-4 font-bold">Dojo Name</th>
+                        <th className="p-4 font-bold">E-mail</th>
                         <th className="p-4 font-bold">Teacher ID</th>
                         <th className="p-4 font-bold">Plano Atual</th>
                         <th className="p-4 font-bold text-right">Ações</th>
@@ -270,6 +325,7 @@ WITH CHECK (auth.jwt() ->> 'email' = 'judobrunomaia@gmail.com');`}
                       {filteredUsers.map(user => (
                         <tr key={user.teacher_id} className="hover:bg-zinc-800/20 transition-colors">
                           <td className="p-4 font-bold">{user.name || 'Sem Nome'}</td>
+                          <td className="p-4 text-zinc-300 text-sm">{user.email || <span className="text-zinc-600 italic">Desconhecido</span>}</td>
                           <td className="p-4 text-zinc-500 font-mono text-xs">{user.teacher_id}</td>
                           <td className="p-4">
                             {editingId === user.teacher_id ? (

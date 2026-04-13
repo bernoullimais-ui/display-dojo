@@ -2,22 +2,34 @@ export interface MediaItem {
   id: string;
   name: string;
   url: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   sponsor_name?: string;
   teacher_id?: string;
+}
+
+export interface HitCycle {
+  name: string;
+  workTime: number;
+  restTime: number;
 }
 
 export interface TimerPreset {
   id: string;
   name: string;
+  mode?: 'HIT' | 'ROUNDS';
   config: {
     prepTime: number;
     workTime: number;
     restTime: number;
     cycles: number;
-    prepLabel: string;
-    workLabel: string;
-    restLabel: string;
+    prepLabel?: string;
+    workLabel?: string;
+    restLabel?: string;
+    hitCycles?: HitCycle[];
+    prepAudioUrl?: string;
+    workAudioUrl?: string;
+    restAudioUrl?: string;
+    finishedAudioUrl?: string;
   };
 }
 
@@ -25,6 +37,7 @@ export interface Playlist {
   id: string;
   name: string;
   media_ids: string[];
+  folders?: string[];
 }
 
 export interface DojoSettings {

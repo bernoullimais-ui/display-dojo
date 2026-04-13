@@ -33,7 +33,7 @@ export default function App() {
   const [activeManualPlaylist, setActiveManualPlaylist] = useState<Playlist | null>(null);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'JUDO DOJO', logo_url: null });
+  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'DOJO TV', logo_url: 'https://picsum.photos/seed/dojotv/200/200' });
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isScoreboardActive, setIsScoreboardActive] = useState(false);
@@ -202,7 +202,22 @@ export default function App() {
       }
 
       const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
-      if (mediaData) setMediaList(mediaData);
+      if (mediaData) {
+        const mappedMedia = mediaData.map(m => {
+          if (m.type === 'video' && (
+            m.url.toLowerCase().includes('.mp3') || 
+            m.url.toLowerCase().includes('.wav') || 
+            m.url.toLowerCase().includes('.m4a') ||
+            m.name.toLowerCase().endsWith('.mp3') ||
+            m.name.toLowerCase().endsWith('.wav') ||
+            m.name.toLowerCase().endsWith('.m4a')
+          )) {
+            return { ...m, type: 'audio' as const };
+          }
+          return m;
+        });
+        setMediaList(mappedMedia);
+      }
       
       if (pairingCode) {
         const { data: sessionData } = await supabase.from('sessions').select('tv_name').eq('id', pairingCode).single();
@@ -226,7 +241,22 @@ export default function App() {
     const mediaChannel = supabase.channel('tv_media_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'media', filter: `teacher_id=eq.${teacherId}` }, async () => {
         const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
-        if (mediaData) setMediaList(mediaData);
+        if (mediaData) {
+          const mappedMedia = mediaData.map(m => {
+            if (m.type === 'video' && (
+              m.url.toLowerCase().includes('.mp3') || 
+              m.url.toLowerCase().includes('.wav') || 
+              m.url.toLowerCase().includes('.m4a') ||
+              m.name.toLowerCase().endsWith('.mp3') ||
+              m.name.toLowerCase().endsWith('.wav') ||
+              m.name.toLowerCase().endsWith('.m4a')
+            )) {
+              return { ...m, type: 'audio' as const };
+            }
+            return m;
+          });
+          setMediaList(mappedMedia);
+        }
       })
       .subscribe();
 
@@ -504,48 +534,76 @@ export default function App() {
     if (!sponsorsConfig.timer_playlist_id) return [];
     const playlist = dojoSettings.playlists?.find(p => p.id === sponsorsConfig.timer_playlist_id);
     if (!playlist) return [];
-    return playlist.media_ids
+    
+    const mediaFromIds = playlist.media_ids
       .map(id => mediaList.find(m => m.id === id))
-      .filter((m): m is MediaItem => m !== undefined)
-      .map(m => ({ url: m.url, type: m.type }));
+      .filter((m): m is MediaItem => m !== undefined);
+      
+    const mediaFromFolders = playlist.folders 
+      ? mediaList.filter(m => playlist.folders!.some(f => m.name.startsWith(f + '/')))
+      : [];
+      
+    const combinedMedia = [...mediaFromIds, ...mediaFromFolders];
+    const uniqueMedia = Array.from(new Map(combinedMedia.map(m => [m.id, m])).values());
+    
+    return uniqueMedia.map(m => ({ url: m.url, type: m.type }));
   }, [sponsorsConfig.timer_playlist_id, dojoSettings.playlists, mediaList]);
 
   const scoreboardSponsors = useMemo(() => {
     if (!sponsorsConfig.scoreboard_playlist_id) return [];
     const playlist = dojoSettings.playlists?.find(p => p.id === sponsorsConfig.scoreboard_playlist_id);
     if (!playlist) return [];
-    return playlist.media_ids
+    
+    const mediaFromIds = playlist.media_ids
       .map(id => mediaList.find(m => m.id === id))
-      .filter((m): m is MediaItem => m !== undefined)
-      .map(m => ({ url: m.url, type: m.type }));
+      .filter((m): m is MediaItem => m !== undefined);
+      
+    const mediaFromFolders = playlist.folders 
+      ? mediaList.filter(m => playlist.folders!.some(f => m.name.startsWith(f + '/')))
+      : [];
+      
+    const combinedMedia = [...mediaFromIds, ...mediaFromFolders];
+    const uniqueMedia = Array.from(new Map(combinedMedia.map(m => [m.id, m])).values());
+    
+    return uniqueMedia.map(m => ({ url: m.url, type: m.type }));
   }, [sponsorsConfig.scoreboard_playlist_id, dojoSettings.playlists, mediaList]);
 
   const activePlaylistMedia = useMemo(() => {
+    let targetPlaylist: Playlist | null = null;
+
     if (activeManualPlaylist) {
-      return activeManualPlaylist.media_ids
-        .map(id => mediaList.find(m => m.id === id))
-        .filter((m): m is MediaItem => m !== undefined);
+      targetPlaylist = activeManualPlaylist;
+    } else {
+      let playlistIdToPlay: string | undefined;
+
+      if (activeSchedules.length > 0) {
+        // Get the first active schedule
+        playlistIdToPlay = activeSchedules[0].playlist_id;
+      } else if (pairingCode && dojoSettings.tv_playlists?.[pairingCode]) {
+        // Fallback to TV's default playlist
+        playlistIdToPlay = dojoSettings.tv_playlists[pairingCode];
+      }
+
+      if (playlistIdToPlay) {
+        targetPlaylist = dojoSettings.playlists?.find(p => p.id === playlistIdToPlay) || null;
+      }
     }
-    
-    let playlistIdToPlay: string | undefined;
 
-    if (activeSchedules.length > 0) {
-      // Get the first active schedule
-      playlistIdToPlay = activeSchedules[0].playlist_id;
-    } else if (pairingCode && dojoSettings.tv_playlists?.[pairingCode]) {
-      // Fallback to TV's default playlist
-      playlistIdToPlay = dojoSettings.tv_playlists[pairingCode];
-    }
+    if (!targetPlaylist) return [];
 
-    if (!playlistIdToPlay) return [];
-
-    const playlist = dojoSettings.playlists?.find(p => p.id === playlistIdToPlay);
-    if (!playlist) return [];
-    
-    // Map media_ids to actual MediaItems
-    return playlist.media_ids
+    const mediaFromIds = targetPlaylist.media_ids
       .map(id => mediaList.find(m => m.id === id))
       .filter((m): m is MediaItem => m !== undefined);
+
+    const mediaFromFolders = targetPlaylist.folders 
+      ? mediaList.filter(m => targetPlaylist!.folders!.some(f => m.name.startsWith(f + '/')))
+      : [];
+
+    // Combine and remove duplicates
+    const combinedMedia = [...mediaFromIds, ...mediaFromFolders];
+    const uniqueMedia = Array.from(new Map(combinedMedia.map(m => [m.id, m])).values());
+    
+    return uniqueMedia;
   }, [activeSchedules, dojoSettings.playlists, dojoSettings.tv_playlists, mediaList, activeManualPlaylist, pairingCode]);
 
   const currentScheduledMedia = useMemo(() => {

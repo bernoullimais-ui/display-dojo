@@ -45,9 +45,8 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
     tickerConfig, setTickerConfig,
     sponsorsConfig, setSponsorsConfig,
     activePresets, savePreset, deletePreset,
-    updateConfig, updateColor, updateLabel,
+    updateConfig,
     updateScoreboard, handleScoreUpdate,
-    removeAudio, toggleTTS,
     updateScoreboardConfig, updateTickerConfig,
     updateSponsorsConfig, updatePlaylists, updateTvPlaylist,
     handleConfigChange
@@ -128,10 +127,6 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
 
 const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const prepAudioRef = useRef<HTMLInputElement>(null);
-  const workAudioRef = useRef<HTMLInputElement>(null);
-  const restAudioRef = useRef<HTMLInputElement>(null);
-
 
   useEffect(() => {
     if (isScanning) {
@@ -237,6 +232,18 @@ const fileInputRef = useRef<HTMLInputElement>(null);
                 />
               </div>
 
+              <div>
+                <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Modo</label>
+                <select 
+                  value={editingPreset.mode || 'HIT'}
+                  onChange={(e) => setEditingPreset({ ...editingPreset, mode: e.target.value as 'HIT' | 'ROUNDS' })}
+                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors"
+                >
+                  <option value="HIT">HIT</option>
+                  <option value="ROUNDS">ROUNDS</option>
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Prep (s)</label>
@@ -244,29 +251,172 @@ const fileInputRef = useRef<HTMLInputElement>(null);
                 </div>
                 <div>
                   <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Rótulo Prep</label>
-                  <input type="text" value={editingPreset.config.prepLabel} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, prepLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                  <input type="text" value={editingPreset.config.prepLabel || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, prepLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
                 </div>
                 <div>
-                  <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Trab (s)</label>
-                  <input type="number" value={editingPreset.config.workTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                  <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Cor Prep</label>
+                  <input type="color" value={editingPreset.config.prepColor || '#f59e0b'} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, prepColor: e.target.value } })} className="w-full h-11 bg-black border border-zinc-800 rounded-xl p-1 cursor-pointer" />
                 </div>
                 <div>
-                  <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Rótulo Trab</label>
-                  <input type="text" value={editingPreset.config.workLabel} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                  <label className="text-xs text-zinc-500 font-bold uppercase mb-1 block">Som Prep</label>
+                  <select value={editingPreset.config.prepAudioUrl || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, prepAudioUrl: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm">
+                    <option value="">Padrão (Beep)</option>
+                    {mediaList.filter(m => m.type === 'audio').map(audio => (
+                      <option key={audio.id} value={audio.url}>{audio.name.split('/').pop()}</option>
+                    ))}
+                  </select>
                 </div>
-                <div>
-                  <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Desc (s)</label>
-                  <input type="number" value={editingPreset.config.restTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Rótulo Desc</label>
-                  <input type="text" value={editingPreset.config.restLabel} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
-                </div>
-                <div className="col-span-2">
-                  <label className="text-xs text-blue-400 font-bold uppercase mb-1 block">Ciclos</label>
-                  <input type="number" value={editingPreset.config.cycles} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, cycles: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
-                </div>
+                
+                {(!editingPreset.mode || editingPreset.mode === 'ROUNDS') && (
+                  <>
+                    <div>
+                      <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Trab (s)</label>
+                      <input type="number" value={editingPreset.config.workTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Rótulo Trab</label>
+                      <input type="text" value={editingPreset.config.workLabel || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Cor Trab</label>
+                      <input type="color" value={editingPreset.config.workColor || '#ef4444'} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workColor: e.target.value } })} className="w-full h-11 bg-black border border-zinc-800 rounded-xl p-1 cursor-pointer" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-red-500 font-bold uppercase mb-1 block">Som Trab</label>
+                      <select value={editingPreset.config.workAudioUrl || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, workAudioUrl: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm">
+                        <option value="">Padrão (Beep)</option>
+                        {mediaList.filter(m => m.type === 'audio').map(audio => (
+                          <option key={audio.id} value={audio.url}>{audio.name.split('/').pop()}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Desc (s)</label>
+                      <input type="number" value={editingPreset.config.restTime} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restTime: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Rótulo Desc</label>
+                      <input type="text" value={editingPreset.config.restLabel || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restLabel: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Cor Desc</label>
+                      <input type="color" value={editingPreset.config.restColor || '#22c55e'} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restColor: e.target.value } })} className="w-full h-11 bg-black border border-zinc-800 rounded-xl p-1 cursor-pointer" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-green-500 font-bold uppercase mb-1 block">Som Desc</label>
+                      <select value={editingPreset.config.restAudioUrl || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, restAudioUrl: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm">
+                        <option value="">Padrão (Beep)</option>
+                        {mediaList.filter(m => m.type === 'audio').map(audio => (
+                          <option key={audio.id} value={audio.url}>{audio.name.split('/').pop()}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="text-xs text-blue-400 font-bold uppercase mb-1 block">Som Fim de Treino</label>
+                      <select value={editingPreset.config.finishedAudioUrl || ''} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, finishedAudioUrl: e.target.value } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm">
+                        <option value="">Padrão (Beep)</option>
+                        {mediaList.filter(m => m.type === 'audio').map(audio => (
+                          <option key={audio.id} value={audio.url}>{audio.name.split('/').pop()}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="text-xs text-blue-400 font-bold uppercase mb-1 block">Ciclos</label>
+                      <input type="number" value={editingPreset.config.cycles} onChange={(e) => setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, cycles: Number(e.target.value) } })} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm" />
+                    </div>
+                  </>
+                )}
               </div>
+
+              {editingPreset.mode === 'HIT' && (
+                <div className="space-y-4 pt-4 border-t border-zinc-800">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs text-blue-400 font-bold uppercase block">Ciclos (HIT)</label>
+                    <button 
+                      onClick={() => {
+                        const currentCycles = editingPreset.config.hitCycles || [];
+                        setEditingPreset({
+                          ...editingPreset,
+                          config: {
+                            ...editingPreset.config,
+                            hitCycles: [...currentCycles, { name: `Exercício ${currentCycles.length + 1}`, workTime: 30, restTime: 10 }]
+                          }
+                        });
+                      }}
+                      className="text-[10px] bg-zinc-800 px-2 py-1 rounded-lg hover:bg-zinc-700"
+                    >
+                      + Adicionar Ciclo
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {(editingPreset.config.hitCycles || []).map((cycle, index) => (
+                      <div key={index} className="bg-black/50 p-3 rounded-xl border border-zinc-800/50 space-y-2 relative">
+                        <button 
+                          onClick={() => {
+                            const newCycles = [...(editingPreset.config.hitCycles || [])];
+                            newCycles.splice(index, 1);
+                            setEditingPreset({
+                              ...editingPreset,
+                              config: { ...editingPreset.config, hitCycles: newCycles }
+                            });
+                          }}
+                          className="absolute top-2 right-2 text-red-500 hover:text-red-400"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                        <div>
+                          <label className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Nome do Exercício</label>
+                          <input 
+                            type="text" 
+                            value={cycle.name}
+                            onChange={(e) => {
+                              const newCycles = [...(editingPreset.config.hitCycles || [])];
+                              newCycles[index].name = e.target.value;
+                              setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, hitCycles: newCycles } });
+                            }}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className="text-[10px] text-red-500 font-bold uppercase mb-1 block">Trab (s)</label>
+                            <input 
+                              type="number" 
+                              value={cycle.workTime}
+                              onChange={(e) => {
+                                const newCycles = [...(editingPreset.config.hitCycles || [])];
+                                newCycles[index].workTime = Number(e.target.value);
+                                setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, hitCycles: newCycles } });
+                              }}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[10px] text-green-500 font-bold uppercase mb-1 block">Desc (s)</label>
+                            <input 
+                              type="number" 
+                              value={cycle.restTime}
+                              onChange={(e) => {
+                                const newCycles = [...(editingPreset.config.hitCycles || [])];
+                                newCycles[index].restTime = Number(e.target.value);
+                                setEditingPreset({ ...editingPreset, config: { ...editingPreset.config, hitCycles: newCycles } });
+                              }}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(!editingPreset.config.hitCycles || editingPreset.config.hitCycles.length === 0) && (
+                      <p className="text-xs text-zinc-500 text-center py-4">Nenhum ciclo adicionado. Adicione ciclos para configurar o HIT.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-4 pt-4">
                 <button onClick={() => setEditingPreset(null)} className="flex-1 bg-zinc-800 py-3 rounded-xl font-bold text-sm">Cancelar</button>
@@ -278,9 +428,15 @@ const fileInputRef = useRef<HTMLInputElement>(null);
               {activePresets.map(preset => (
                 <div key={preset.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
                   <div>
-                    <h4 className="font-bold text-lg">{preset.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-lg">{preset.name}</h4>
+                      <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded-full text-zinc-400 font-bold">{preset.mode || 'ROUNDS'}</span>
+                    </div>
                     <p className="text-xs text-zinc-500 mt-1">
-                      {preset.config.workTime}s / {preset.config.restTime}s • {preset.config.cycles} ciclos
+                      {preset.mode === 'HIT' && preset.config.hitCycles && preset.config.hitCycles.length > 0 
+                        ? `${preset.config.hitCycles.length} exercícios variados`
+                        : `${preset.config.workTime}s / ${preset.config.restTime}s • ${preset.config.cycles} ciclos`
+                      }
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -561,16 +717,7 @@ const fileInputRef = useRef<HTMLInputElement>(null);
             setEditingPreset={setEditingPreset}
             handleSavePreset={savePreset}
             handleDeletePreset={deletePreset}
-            handleFileUpload={handleFileUpload}
-            isUploading={isUploading}
-            prepAudioRef={prepAudioRef}
-            workAudioRef={workAudioRef}
-            restAudioRef={restAudioRef}
             updateConfig={updateConfig}
-            updateColor={updateColor}
-            updateLabel={updateLabel}
-            removeAudio={removeAudio}
-            toggleTTS={toggleTTS}
           />
         )}
 
