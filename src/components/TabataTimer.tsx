@@ -456,7 +456,7 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
             <span>{getPhaseLabel()}</span>
           </motion.div>
 
-          {config.name && (
+          {config.name && config.mode !== 'PROGRESSIVE' && config.mode !== 'REGRESSIVE' && (
             <div className="text-zinc-500 text-[4vmin] font-medium uppercase tracking-widest">
               ({config.name})
             </div>
