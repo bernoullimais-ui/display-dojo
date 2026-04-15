@@ -1,0 +1,5 @@
+{
+  "name": "DOJO TV",
+  "description": "SaaS for Judo dojos: Tabata timer and media management for Smart TVs controlled via smartphone.",
+  "requestFramePermissions": ["screen-wake-lock", "camera", "microphone"]
+}
