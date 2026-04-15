@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Crown, Star, Tv, PlusCircle, Trash2, Loader2, Lock, Check } from 'lucide-react';
 import { DojoSettings } from '../types';
 import SponsorReports from './SponsorReports';

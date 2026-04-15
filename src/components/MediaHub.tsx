@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { MediaItem, Playlist, DojoSettings, ScheduleItem } from '../types';
 import { Maximize, XCircle, Plus, Loader2, Upload, Crown, Lock, Trash2, PlayCircle, Image as ImageIcon, Video, Calendar, Clock, Edit, Settings, Check, Youtube, RotateCcw, VolumeX, Volume2, Volume1, FolderInput, CheckSquare, Folder, FolderUp } from 'lucide-react';

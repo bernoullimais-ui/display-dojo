@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Loader2, Lock, Mail, User } from 'lucide-react';
 
 interface AuthProps {

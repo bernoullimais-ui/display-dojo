@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import TVPairing from './components/TVPairing';
 import RemotePairing from './components/RemotePairing';
 import { Auth } from './components/Auth';
@@ -10,7 +10,6 @@ import AdminPanel from './components/AdminPanel';
 import SponsorReports from './components/SponsorReports';
 import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv, PlusCircle, QrCode } from 'lucide-react';
 import { supabase } from './lib/supabase';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import YouTube from 'react-youtube';
 
 import { MediaItem, TimerPreset, Playlist, DojoSettings, ScheduleItem } from './types';
@@ -156,7 +155,9 @@ export default function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
   }, [viewMode, pairingCode]);
 
   useEffect(() => {

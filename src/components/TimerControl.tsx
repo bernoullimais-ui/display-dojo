@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Timer as TimerIcon, Upload, Check, Zap, Coffee, RotateCcw, Volume2, Trash2, Lock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { TimerPreset } from '../types';
 

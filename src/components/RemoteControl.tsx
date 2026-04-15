@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import TVPairing from './TVPairing';
 import RemotePairing from './RemotePairing';
 import { Auth } from './Auth';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Lock, Timer as TimerIcon } from 'lucide-react';
 
 interface ScoreboardControlProps {

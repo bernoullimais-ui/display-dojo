@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, RotateCcw, Timer as TimerIcon, Zap, Coffee, Trophy } from 'lucide-react';
 
 type Phase = 'PREP' | 'WORK' | 'REST' | 'RUNNING' | 'FINISHED';
