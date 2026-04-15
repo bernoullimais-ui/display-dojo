@@ -33,7 +33,7 @@ export default function App() {
   const [activeManualPlaylist, setActiveManualPlaylist] = useState<Playlist | null>(null);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'DOJO TV', logo_url: 'https://picsum.photos/seed/dojotv/200/200' });
+  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'DOJO TV', logo_url: '/logo.png' });
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isScoreboardActive, setIsScoreboardActive] = useState(false);

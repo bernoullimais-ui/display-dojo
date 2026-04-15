@@ -80,7 +80,7 @@ export default function RemotePairing({ pairingCode, onPaired, session: authSess
         }
 
         // Try to insert into dojo_settings table first, in case there is a foreign key constraint
-        const { error: settingsError } = await supabase.from('dojo_settings').insert([{ teacher_id: teacherId, name: 'DOJO TV', logo_url: 'https://picsum.photos/seed/dojotv/200/200' }]);
+        const { error: settingsError } = await supabase.from('dojo_settings').insert([{ teacher_id: teacherId, name: 'DOJO TV', logo_url: '/logo.png' }]);
         if (settingsError) {
           console.warn('Could not insert dojo_settings (might not exist or not needed):', settingsError);
         }

@@ -21,7 +21,7 @@ const defaultPresets: TimerPreset[] = [
 ];
 
 export function useDojoSync(teacherId: string, handleCommand: (type: string, payload?: any, targetTvId?: string) => void) {
-  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'DOJO TV', logo_url: 'https://picsum.photos/seed/dojotv/200/200' });
+  const [dojoSettings, setDojoSettings] = useState<DojoSettings>({ name: 'DOJO TV', logo_url: '/logo.png' });
   const [localConfig, setLocalConfig] = useState({
     name: '',
     prepTime: 10, workTime: 60, restTime: 10, cycles: 10,
