@@ -30,6 +30,7 @@ interface MediaHubProps {
   updateSponsorsConfig: (field: string, value: any) => Promise<void>;
   updatePlaylists: (playlists: Playlist[]) => Promise<void>;
   handleConfigChange: (newSettings: any) => Promise<void>;
+  onUpgradeClick: () => void;
 }
 
 import LiveBroadcastModal from './LiveBroadcastModal';
@@ -59,7 +60,8 @@ export default function MediaHub({
   updateTickerConfig,
   updateSponsorsConfig,
   updatePlaylists,
-  handleConfigChange
+  handleConfigChange,
+  onUpgradeClick
 }: MediaHubProps) {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [mediaUrlInput, setMediaUrlInput] = useState('');
@@ -631,9 +633,12 @@ export default function MediaHub({
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                   O Hub de Mídias está disponível a partir do Plano STARTER. Playlists, Agenda e Letreiro Digital no Plano PRÓ. O upload de áudios é gratuito!
                 </p>
-                <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                <button 
+                  onClick={onUpgradeClick}
+                  className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors"
+                >
                   Fazer Upgrade
-                </a>
+                </button>
               </div>
             )}
 
@@ -909,7 +914,7 @@ export default function MediaHub({
                         onClick={() => { if (isBatchMode) toggleMediaSelection(item.id); }}
                       >
                         {item.type === 'image' ? (
-                          <img src={item.url} className="w-full h-full object-cover opacity-70" />
+                          <img src={item.url} className="w-full h-full object-cover opacity-70" referrerPolicy="no-referrer" />
                         ) : item.type === 'audio' ? (
                           <div className="w-full h-full relative bg-zinc-900 opacity-70 flex items-center justify-center">
                             <Volume2 className="text-zinc-600" size={40} />
@@ -917,7 +922,7 @@ export default function MediaHub({
                         ) : isYouTube ? (
                           <div className="w-full h-full relative bg-zinc-900 opacity-70">
                             {youtubeVideoId ? (
-                              <img src={`https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`} className="w-full h-full object-cover" />
+                              <img src={`https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : null}
                             <div className="absolute inset-0 flex items-center justify-center">
                               <Youtube className="text-red-600 drop-shadow-lg" size={40} />
@@ -928,6 +933,7 @@ export default function MediaHub({
                             <img 
                               src={`${item.url}_thumb.jpg`} 
                               className="w-full h-full object-cover" 
+                              referrerPolicy="no-referrer"
                               onError={(e) => { 
                                 e.currentTarget.style.display = 'none'; 
                                 e.currentTarget.nextElementSibling?.classList.remove('hidden'); 
@@ -1019,9 +1025,12 @@ export default function MediaHub({
                 <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                   A Agenda está disponível a partir do Plano PRÓ.
                 </p>
-                <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                <button 
+                  onClick={onUpgradeClick}
+                  className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors"
+                >
                   Fazer Upgrade
-                </a>
+                </button>
               </div>
             ) : (
               <>
@@ -1169,9 +1178,12 @@ export default function MediaHub({
                     <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                       As Playlists estão disponíveis a partir do Plano PRÓ.
                     </p>
-                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                    <button 
+                      onClick={onUpgradeClick}
+                      className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors"
+                    >
                       Fazer Upgrade
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -1310,7 +1322,7 @@ export default function MediaHub({
                               className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${editingPlaylist.media_ids.includes(m.id) ? 'border-blue-500 scale-95' : 'border-transparent hover:border-zinc-700'}`}
                             >
                               {m.type === 'image' ? (
-                                <img src={m.url} className="w-full h-full object-cover" />
+                                <img src={m.url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : m.type === 'audio' ? (
                                 <div className="w-full h-full relative bg-zinc-800 flex items-center justify-center">
                                   <Volume2 size={20} className="text-zinc-500" />
@@ -1318,7 +1330,7 @@ export default function MediaHub({
                               ) : isYouTube ? (
                                 <div className="w-full h-full relative bg-zinc-800">
                                   {youtubeVideoId && (
-                                    <img src={`https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-70" />
+                                    <img src={`https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-70" referrerPolicy="no-referrer" />
                                   )}
                                   <div className="absolute inset-0 flex items-center justify-center">
                                     <Youtube size={20} className="text-red-600 drop-shadow-lg" />
@@ -1329,6 +1341,7 @@ export default function MediaHub({
                                   <img 
                                     src={`${m.url}_thumb.jpg`} 
                                     className="w-full h-full object-cover opacity-70" 
+                                    referrerPolicy="no-referrer"
                                     onError={(e) => { 
                                       e.currentTarget.style.display = 'none'; 
                                       e.currentTarget.nextElementSibling?.classList.remove('hidden'); 
@@ -1427,9 +1440,12 @@ export default function MediaHub({
                     <p className="text-zinc-400 text-sm max-w-xs mx-auto">
                       O Letreiro Digital (Avisos) está disponível apenas no Plano PRO.
                     </p>
-                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors">
+                    <button 
+                      onClick={onUpgradeClick}
+                      className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 transition-colors"
+                    >
                       Fazer Upgrade
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
@@ -1530,9 +1546,12 @@ export default function MediaHub({
                     <p className="text-zinc-400 text-xs max-w-xs mx-auto">
                       A customização da logomarca está disponível a partir do Plano STARTER.
                     </p>
-                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-xl font-bold mt-2 hover:bg-blue-700 transition-colors text-sm">
+                    <button 
+                      onClick={onUpgradeClick}
+                      className="inline-block bg-blue-600 text-white px-6 py-2 rounded-xl font-bold mt-2 hover:bg-blue-700 transition-colors text-sm"
+                    >
                       Fazer Upgrade
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
@@ -1582,9 +1601,12 @@ export default function MediaHub({
                     <p className="text-zinc-400 text-xs max-w-[200px] mx-auto">
                       Ative espaços de patrocinadores a partir do Plano STARTER.
                     </p>
-                    <a href="https://www.judotech.com.br/display-planos" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-blue-700 transition-colors">
+                    <button 
+                      onClick={onUpgradeClick}
+                      className="inline-block bg-blue-600 text-white px-6 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-blue-700 transition-colors"
+                    >
                       Fazer Upgrade
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-4">

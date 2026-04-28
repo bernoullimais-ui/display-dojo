@@ -25,17 +25,22 @@ export default function LiveBroadcastModal({ pairingCode, onClose }: LiveBroadca
     channelRef.current = channel;
 
     channel.on('broadcast', { event: 'signal' }, async (payload) => {
-      const data = payload.payload;
-      const pc = peerConnectionRef.current;
-      
-      if (!pc) return;
+      try {
+        const data = payload.payload;
+        if (!data) return;
+        
+        const pc = peerConnectionRef.current;
+        if (!pc) return;
 
-      if (data.type === 'answer' && data.target === 'remote') {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        setIsBroadcasting(true);
-        setIsInitializing(false);
-      } else if (data.type === 'candidate' && data.target === 'remote') {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        if (data.type === 'answer' && data.target === 'remote') {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          setIsBroadcasting(true);
+          setIsInitializing(false);
+        } else if (data.type === 'candidate' && data.target === 'remote') {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      } catch (err) {
+        console.error('WebRTC signaling error:', err);
       }
     }).subscribe();
 

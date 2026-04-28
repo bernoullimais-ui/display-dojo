@@ -149,6 +149,10 @@ export default function Scoreboard({
     if (isMuted) return;
     try {
       const ctx = getAudioContext();
+      if (!ctx || ctx.state === 'suspended') {
+        // Attempt to resume if suspended (needed for some browsers)
+        ctx?.resume();
+      }
       if (!ctx) return;
       
       const duration = 1.2;
@@ -187,7 +191,7 @@ export default function Scoreboard({
       osc.stop(ctx.currentTime + duration);
       mod.stop(ctx.currentTime + duration);
     } catch (e) {
-      console.error('Audio play failed:', e);
+      console.warn('Audio play failed (Whistle):', e);
     }
   };
 
@@ -195,38 +199,45 @@ export default function Scoreboard({
     if (isMuted) return;
     try {
       const ctx = getAudioContext();
+      if (!ctx || ctx.state === 'suspended') {
+        ctx?.resume();
+      }
       if (!ctx) return;
       
       // Double high-pitched beep for Ippon
       const playBeep = (startTime: number) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, startTime); // A5
-        
-        gain.gain.setValueAtTime(volume / 100, startTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.start(startTime);
-        osc.stop(startTime + 0.3);
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, startTime); // A5
+          
+          gain.gain.setValueAtTime(volume / 100, startTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start(startTime);
+          osc.stop(startTime + 0.3);
+        } catch (err) {}
       };
 
       playBeep(ctx.currentTime);
       playBeep(ctx.currentTime + 0.4);
     } catch (e) {
-      console.error('Audio play failed:', e);
+      console.warn('Audio play failed (Ippon):', e);
     }
   };
 
   // Match Timer
   useEffect(() => {
-    if (isMatchRunning) {
-      if (!isGoldenScore && matchTime > 0) {
-        matchTimerRef.current = setInterval(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    const tick = () => {
+      if (isMatchRunning) {
+        if (!isGoldenScore && matchTime > 0) {
           setMatchTime(prev => {
             if (prev <= 1) {
               if (osaekomiActive) {
@@ -238,18 +249,21 @@ export default function Scoreboard({
             }
             return prev - 1;
           });
-        }, 1000);
-      } else if (isGoldenScore) {
-        matchTimerRef.current = setInterval(() => {
+        } else if (isGoldenScore) {
           setGoldenScoreTime(prev => prev + 1);
-        }, 1000);
+        }
+        timeoutId = setTimeout(tick, 1000);
       }
+    };
+
+    if (isMatchRunning) {
+      timeoutId = setTimeout(tick, 1000);
     }
 
     return () => {
-      if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isMatchRunning, matchTime, isGoldenScore, isMuted, volume, osaekomiActive]);
+  }, [isMatchRunning, matchTime, isGoldenScore, osaekomiActive]);
 
   // Handle end of match when Osaekomi finishes after time is up
   useEffect(() => {
@@ -341,14 +355,21 @@ export default function Scoreboard({
 
   // Osaekomi Timer
   useEffect(() => {
-    if (osaekomiActive && !winner) {
-      osaekomiTimerRef.current = setInterval(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const tick = () => {
+      if (osaekomiActive && !winner) {
         setOsaekomiTime(prev => prev + 1);
-      }, 1000);
+        timeoutId = setTimeout(tick, 1000);
+      }
+    };
+
+    if (osaekomiActive && !winner) {
+      timeoutId = setTimeout(tick, 1000);
     }
 
     return () => {
-      if (osaekomiTimerRef.current) clearInterval(osaekomiTimerRef.current);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [osaekomiActive, winner]);
 
@@ -547,7 +568,7 @@ export default function Scoreboard({
               {currentSponsor.type === 'video' ? (
                 <video src={currentSponsor.url} autoPlay loop muted playsInline className="w-full h-full object-contain" />
               ) : (
-                <img src={currentSponsor.url} className="w-full h-full object-contain" />
+                <img src={currentSponsor.url} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               )}
             </motion.div>
           </AnimatePresence>

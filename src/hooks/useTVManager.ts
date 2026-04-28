@@ -85,9 +85,14 @@ export function useTVManager(teacherId: string, isBusiness: boolean) {
         }
       }
 
+      const tvCount = tvSessions.length;
       const { error: updateError } = await supabase
         .from('sessions')
-        .update({ status: 'paired', teacher_id: teacherId, tv_name: isBusiness ? `TV ${tvSessions.length + 1}` : 'TV Principal' })
+        .update({ 
+          status: 'paired', 
+          teacher_id: teacherId, 
+          tv_name: isBusiness ? `TV ${tvCount + 1}` : 'TV Principal' 
+        })
         .eq('id', code);
 
       if (updateError) {

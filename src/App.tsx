@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TVPairing from './components/TVPairing';
 import RemotePairing from './components/RemotePairing';
@@ -12,7 +12,8 @@ import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap,
 import { supabase } from './lib/supabase';
 import YouTube from 'react-youtube';
 
-import { MediaItem, TimerPreset, Playlist, DojoSettings, ScheduleItem } from './types';
+import { MediaItem, TimerPreset, Playlist, DojoSettings, ScheduleItem, MasterClass, MasterClassMarker } from './types';
+import OnboardingModal from './components/OnboardingModal';
 import RemoteControl from './components/RemoteControl';
 
 export default function App() {
@@ -43,10 +44,11 @@ export default function App() {
     sport: 'judo' as 'judo' | 'jiujitsu' | 'karate'
   });
 
-  const tier = (dojoSettings.subscription_tier || 'FREE').trim().toUpperCase();
+  const tier = (dojoSettings?.subscription_tier || 'FREE').trim().toUpperCase();
   const isStarter = ['STARTER', 'PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
   const isPro = ['PRO', 'PREMIUM', 'BUSINESS'].includes(tier);
   const isBusiness = ['BUSINESS'].includes(tier);
+  const lastProcessedCommandTimestampRef = useRef<string | null>(null);
 
   const [tickerConfig, setTickerConfig] = useState({
     text: '',
@@ -67,6 +69,82 @@ export default function App() {
   const [isLiveBroadcasting, setIsLiveBroadcasting] = useState(false);
   const liveStreamRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  
+  const [activeMasterClass, setActiveMasterClass] = useState<MasterClass | null>(null);
+  const [isMasterClassStarted, setIsMasterClassStarted] = useState(false);
+  const [lastMarkerIndex, setLastMarkerIndex] = useState(-1);
+  const [isMasterClassWaitingRelease, setIsMasterClassWaitingRelease] = useState(false);
+
+  const isMasterClassStartedRef = useRef(isMasterClassStarted);
+  useEffect(() => {
+    isMasterClassStartedRef.current = isMasterClassStarted;
+  }, [isMasterClassStarted]);
+
+  const youtubePlayerOpts = useMemo(() => ({
+    width: '100%',
+    height: '100%',
+    playerVars: {
+      autoplay: 1, // We must hardcode autoplay to allow API triggers later
+      mute: 1, 
+      controls: 0,
+      disablekb: 1,
+      fs: 0,
+      modestbranding: 1,
+      rel: 0,
+      enablejsapi: 1,
+      iv_load_policy: 3,
+      playsinline: 1,
+      origin: typeof window !== 'undefined' ? window.location.origin : undefined
+    }
+  }), []);
+
+  const executeYoutubeCommand = useCallback((func: string, args: any[] = []) => {
+    try {
+        if (youtubePlayerRef.current) {
+            // Case 1: It's the native React-Youtube API object wrapper (MasterClass)
+            if (typeof youtubePlayerRef.current?.getIframe === 'function') {
+                try {
+                    const iframe = youtubePlayerRef.current.getIframe();
+                    // Ensure the internal iframe actually has a source fully loaded before invoking API methods to prevent library crash
+                    if (iframe && typeof iframe.getAttribute === 'function' && iframe.getAttribute('src')) {
+                       try {
+                           youtubePlayerRef.current[func](...args);
+                       } catch(innerE) {}
+                       return;
+                    }
+                } catch (e) {} // Ignore inner getIframe crashes
+            }
+            if (typeof youtubePlayerRef.current[func] === 'function') {
+                 // Try direct method call anyway, but shield it from `.src` crashes internally if it attempts DOM access
+                try {
+                    // Quick readiness check: if getPlayerState throws, the player is not ready
+                    if (typeof youtubePlayerRef.current.getPlayerState === 'function') {
+                        youtubePlayerRef.current.getPlayerState();
+                    }
+                    youtubePlayerRef.current[func](...args);
+                    return;
+                } catch (innerErr) {
+                    // Silently fail if internal player API is not ready
+                }
+            }
+            // Case 2: It's a raw DOM IFrame element (Free Media)
+            if (youtubePlayerRef.current.tagName === 'IFRAME') {
+                youtubePlayerRef.current.contentWindow?.postMessage(
+                    JSON.stringify({ event: 'command', func: func, args: args }), '*'
+                );
+                return;
+            }
+        }
+        
+        // Case 3: Complete fallback logic if refs aren't mounted but elements exist
+        const iframe = document.querySelector('iframe[src*="youtube.com"]') as HTMLIFrameElement;
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args }), '*');
+        }
+    } catch (e) {
+      console.error(`Error sending youtube command ${func}:`, e);
+    }
+  }, []);
 
   useEffect(() => {
     const handleInteraction = () => {
@@ -84,8 +162,81 @@ export default function App() {
   }, [viewMode]);
 
   useEffect(() => {
-    if (viewMode !== 'TV') return;
+    if (viewMode !== 'TV' || !activeMasterClass || isMasterClassWaitingRelease || isTimerActive) return;
 
+    const interval = setInterval(() => {
+      if (!youtubePlayerRef.current) return;
+      
+      try {
+        if (typeof youtubePlayerRef.current.getCurrentTime !== 'function') return;
+        const currentTime = youtubePlayerRef.current.getCurrentTime();
+        
+        // Grace period for the very first marker to ensure video starts
+        if (lastMarkerIndex === -1 && currentTime < 0.5) return;
+
+        const nextMarkerIndex = lastMarkerIndex + 1;
+        const nextMarker = activeMasterClass.markers?.[nextMarkerIndex];
+
+        if (nextMarker && currentTime >= nextMarker.timestamp) {
+          setLastMarkerIndex(nextMarkerIndex);
+          
+          if (nextMarker.action === 'START_TIMER') {
+            executeYoutubeCommand('pauseVideo');
+            setIsTimerActive(true);
+            setRemoteCommand({ 
+              type: 'LOAD_PRESET', 
+              payload: {
+                ...nextMarker.timer_config,
+                name: activeMasterClass.title,
+                workLabel: activeMasterClass.title
+              },
+              timestamp: new Date().toISOString() 
+            });
+          } else if (nextMarker.action === 'WAIT_RELEASE') {
+            executeYoutubeCommand('pauseVideo');
+            setIsMasterClassWaitingRelease(true);
+          }
+        }
+      } catch (e) {
+        // Player might not be ready yet
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [viewMode, activeMasterClass, lastMarkerIndex, isMasterClassWaitingRelease, isTimerActive]);
+
+  useEffect(() => {
+    // When timer finishes during a MasterClass, resume video
+    if (activeMasterClass && !isTimerActive && !isMasterClassWaitingRelease && lastMarkerIndex >= 0) {
+      const currentMarker = activeMasterClass.markers?.[lastMarkerIndex];
+      if (currentMarker?.action === 'START_TIMER') {
+        executeYoutubeCommand('playVideo');
+      }
+    }
+  }, [isTimerActive, activeMasterClass, lastMarkerIndex, isMasterClassWaitingRelease, executeYoutubeCommand]);
+
+  // Sync MasterClass state to Supabase for Remote awarenes
+  useEffect(() => {
+    if (viewMode !== 'TV' || !pairingCode || !supabase) return;
+    
+    const syncState = async () => {
+      await supabase
+        .from('sessions')
+        .update({ 
+          masterclass_state: activeMasterClass ? {
+            id: activeMasterClass.id,
+            is_started: isMasterClassStarted,
+            waiting_release: isMasterClassWaitingRelease,
+            marker_index: lastMarkerIndex
+          } : null
+        })
+        .eq('id', pairingCode);
+    };
+    
+    syncState();
+  }, [activeMasterClass, isMasterClassStarted, isMasterClassWaitingRelease, lastMarkerIndex, viewMode, pairingCode]);
+
+  useEffect(() => {
     let videoElement: HTMLVideoElement | null = null;
 
     const enableWakeLock = () => {
@@ -168,9 +319,9 @@ export default function App() {
 
   const [tvName, setTvName] = useState<string>('');
 
-  // Fetch schedules, settings, and media for TV
+  // Fetch schedules, settings, and media
   useEffect(() => {
-    if (!teacherId || viewMode !== 'TV' || !supabase) return;
+    if (!teacherId || !supabase) return;
     const fetchData = async () => {
       const { data: scheduleData } = await supabase.from('schedules').select('*').eq('teacher_id', teacherId);
       if (scheduleData) setSchedules(scheduleData);
@@ -183,6 +334,10 @@ export default function App() {
         ...settingsData,
         name: settingsData?.name || globalSettingsData?.name || 'Meu Dojo',
         logo_url: settingsData?.logo_url || globalSettingsData?.logo_url || '',
+        city: settingsData?.city || '',
+        state: settingsData?.state || '',
+        martial_arts: settingsData?.martial_arts || [],
+        onboarding_completed: settingsData?.onboarding_completed || false,
         scoreboard_config: {
           ...(globalSettingsData?.scoreboard_config || {}),
           ...(settingsData?.scoreboard_config || {})
@@ -202,34 +357,36 @@ export default function App() {
         }
       }
 
-      const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
-      if (mediaData) {
-        const mappedMedia = mediaData.map(m => {
-          if (m.type === 'video' && (
-            m.url.toLowerCase().includes('.mp3') || 
-            m.url.toLowerCase().includes('.wav') || 
-            m.url.toLowerCase().includes('.m4a') ||
-            m.name.toLowerCase().endsWith('.mp3') ||
-            m.name.toLowerCase().endsWith('.wav') ||
-            m.name.toLowerCase().endsWith('.m4a')
-          )) {
-            return { ...m, type: 'audio' as const };
-          }
-          return m;
-        });
-        setMediaList(mappedMedia);
-      }
-      
-      if (pairingCode) {
-        const { data: sessionData } = await supabase.from('sessions').select('tv_name').eq('id', pairingCode).single();
-        if (sessionData?.tv_name) setTvName(sessionData.tv_name);
+      if (viewMode === 'TV') {
+        const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
+        if (mediaData) {
+          const mappedMedia = mediaData.map(m => {
+            if (m.type === 'video' && (
+              m.url.toLowerCase().includes('.mp3') || 
+              m.url.toLowerCase().includes('.wav') || 
+              m.url.toLowerCase().includes('.m4a') ||
+              m.name.toLowerCase().endsWith('.mp3') ||
+              m.name.toLowerCase().endsWith('.wav') ||
+              m.name.toLowerCase().endsWith('.m4a')
+            )) {
+              return { ...m, type: 'audio' as const };
+            }
+            return m;
+          });
+          setMediaList(mappedMedia);
+        }
+        
+        if (pairingCode) {
+          const { data: sessionData } = await supabase.from('sessions').select('tv_name').eq('id', pairingCode).single();
+          if (sessionData?.tv_name) setTvName(sessionData.tv_name);
+        }
       }
 
       setIsLoadingSettings(false);
     };
     fetchData();
 
-    // Real-time subscriptions for TV to keep data in sync
+    // Real-time subscriptions to keep data in sync
     const settingsChannel = supabase.channel('tv_settings_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dojo_settings', filter: `teacher_id=eq.${teacherId}` }, (payload) => {
         const data = payload.new as any;
@@ -241,6 +398,7 @@ export default function App() {
 
     const mediaChannel = supabase.channel('tv_media_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'media', filter: `teacher_id=eq.${teacherId}` }, async () => {
+        if (viewMode !== 'TV') return;
         const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
         if (mediaData) {
           const mappedMedia = mediaData.map(m => {
@@ -285,16 +443,76 @@ export default function App() {
     }
   }, [viewMode, teacherId, isLoadingSettings, dojoSettings.timer_config?.splashDuration]);
 
+  // Handle MasterClass playback flow (Play/Pause/Unmute)
+  useEffect(() => {
+    if (activeMasterClass) {
+      const managePlayback = () => {
+        try {
+          if (!youtubePlayerRef.current) return;
+            
+          const isStarted = isMasterClassStarted && !isMasterClassWaitingRelease && !isTimerActive;
+          
+          let state = -2; // -2: unknown/error, -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering, 5: cued
+          let isPlayerReady = false;
+          if (typeof youtubePlayerRef.current.getPlayerState === 'function') {
+             try { 
+               state = youtubePlayerRef.current.getPlayerState(); 
+               isPlayerReady = true;
+             } catch(e) {
+               isPlayerReady = false;
+             }
+          }
+          
+          if (!isPlayerReady) return; // Wait for next tick if player is internally broken or loading
+          
+          if (isStarted) {
+            if (state !== 1 && state !== 3 && Date.now() - (youtubePlayerRef.current._lastPlayAttempt || 0) > 2000) {
+              youtubePlayerRef.current._lastPlayAttempt = Date.now();
+              executeYoutubeCommand('playVideo');
+            }
+          } else {
+            if (state !== 2 && state !== 5 && state !== -1 && Date.now() - (youtubePlayerRef.current._lastPauseAttempt || 0) > 2000) {
+              youtubePlayerRef.current._lastPauseAttempt = Date.now();
+              executeYoutubeCommand('pauseVideo');
+            }
+          }
+        } catch (e) {
+          // Silent catch to prevent console flood
+        }
+      };
+      
+      const intervalId = setInterval(managePlayback, 500); 
+      return () => clearInterval(intervalId);
+    }
+  }, [activeMasterClass, isMasterClassStarted, isMasterClassWaitingRelease, isTimerActive, executeYoutubeCommand]);
+
+  // Sync YouTube player volume and mute state
+  useEffect(() => {
+     try {
+       const func = isMuted ? 'mute' : 'unMute';
+       executeYoutubeCommand(func);
+     } catch(e) {}
+  }, [isMuted, executeYoutubeCommand]);
+
+  useEffect(() => {
+     try {
+       executeYoutubeCommand('setVolume', [volume]);
+     } catch(e) {}
+  }, [volume, executeYoutubeCommand]);
+
   // Listen for remote commands
   useEffect(() => {
     if (!teacherId || !pairingCode || !supabase) return;
 
     const handleCommandUpdate = (payload: any) => {
-      if (payload.new.status === 'pending' || !payload.new.teacher_id) {
-        setTeacherId(null);
-        setPairingCode(null);
-        return;
-      }
+      try {
+        if (!payload.new) return;
+        
+        if (payload.new.status === 'pending' || !payload.new.teacher_id) {
+          setTeacherId(null);
+          setPairingCode(null);
+          return;
+        }
       
       if (payload.new.teacher_id && payload.new.teacher_id !== teacherId) {
         setTeacherId(payload.new.teacher_id);
@@ -302,7 +520,18 @@ export default function App() {
       
       if (payload.new.last_command) {
         const cmd = payload.new.last_command;
+        if (!cmd) return; // Extra safety
+        
+        const cmdTimestamp = cmd.timestamp;
+
+        // Skip if we already processed this command to avoid loops during state sync
+        if (cmdTimestamp && cmdTimestamp === lastProcessedCommandTimestampRef.current) {
+          return;
+        }
+        
+        lastProcessedCommandTimestampRef.current = cmdTimestamp;
         setRemoteCommand(cmd);
+        
         if (cmd.type === 'START' || cmd.type === 'PAUSE' || cmd.type === 'RESET' || cmd.type === 'CONFIG_UPDATE') {
           setIsTimerActive(true);
           setIsScoreboardActive(false);
@@ -315,12 +544,14 @@ export default function App() {
         if (cmd.type === 'SHOW_MEDIA') {
           setActiveMedia(cmd.payload);
           setActiveManualPlaylist(null);
+          setActiveMasterClass(null);
           setIsScoreboardActive(false);
           setIsTimerActive(false);
         }
         if (cmd.type === 'SHOW_PLAYLIST') {
           setActiveManualPlaylist(cmd.payload);
           setActiveMedia(null);
+          setActiveMasterClass(null);
           setIsScoreboardActive(false);
           setIsTimerActive(false);
         }
@@ -330,6 +561,8 @@ export default function App() {
         if (cmd.type === 'STOP_MEDIA') {
           setActiveMedia(null);
           setActiveManualPlaylist(null);
+          setActiveMasterClass(null);
+          setIsMasterClassStarted(false);
         }
         if (cmd.type === 'SHOW_SCOREBOARD') {
           setIsScoreboardActive(true);
@@ -341,33 +574,53 @@ export default function App() {
         if (cmd.type === 'SETTINGS_UPDATE') setDojoSettings(cmd.payload);
         if (cmd.type === 'TOGGLE_MUTE') setIsMuted(cmd.payload);
         if (cmd.type === 'SET_VOLUME') setVolume(cmd.payload);
-        
-        const sendYoutubeCommand = (func: string, args: any[] = []) => {
-          try {
-            if (youtubePlayerRef.current && typeof youtubePlayerRef.current[func] === 'function') {
-              youtubePlayerRef.current[func](...args);
-            } else {
-              const iframe = document.querySelector('iframe[src*="youtube.com"]') as HTMLIFrameElement;
-              if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args }), '*');
-              }
-            }
-          } catch (e) {
-            console.error('Error sending youtube command:', e);
-          }
-        };
 
-        if (cmd.type === 'YOUTUBE_PLAY') sendYoutubeCommand('playVideo');
-        if (cmd.type === 'YOUTUBE_PAUSE') sendYoutubeCommand('pauseVideo');
+        if (cmd.type === 'SHOW_MASTERCLASS') {
+          setActiveMasterClass(cmd.payload);
+          setLastMarkerIndex(-1);
+          setIsMasterClassStarted(false);
+          setIsMasterClassWaitingRelease(false);
+          setIsTimerActive(false);
+          setIsScoreboardActive(false);
+          setActiveMedia(null);
+          setActiveManualPlaylist(null);
+          
+          // No immediate playVideo here, let onReady/onStateChange handle it via isMasterClassStarted
+        }
+
+        if (cmd.type === 'PLAY_MASTERCLASS') {
+          setIsMasterClassStarted(true);
+          if (youtubePlayerRef.current) youtubePlayerRef.current._lastPlayAttempt = Date.now();
+          executeYoutubeCommand('playVideo');
+        }
+
+        if (cmd.type === 'SENSEI_RELEASE') {
+          setIsMasterClassWaitingRelease(false);
+          setIsMasterClassStarted(true);
+          if (youtubePlayerRef.current) youtubePlayerRef.current._lastPlayAttempt = Date.now();
+          executeYoutubeCommand('playVideo');
+        }
+        
+        if (cmd.type === 'YOUTUBE_PLAY') {
+          if (youtubePlayerRef.current) youtubePlayerRef.current._lastPlayAttempt = Date.now();
+          executeYoutubeCommand('playVideo');
+        }
+        if (cmd.type === 'YOUTUBE_PAUSE') {
+          if (youtubePlayerRef.current) youtubePlayerRef.current._lastPauseAttempt = Date.now();
+          executeYoutubeCommand('pauseVideo');
+        }
         if (cmd.type === 'YOUTUBE_SEEK') {
           try {
-            const currentTime = youtubePlayerRef.current?.getCurrentTime ? youtubePlayerRef.current.getCurrentTime() : 0;
-            sendYoutubeCommand('seekTo', [currentTime + cmd.payload, true]);
+            let currentTime = 0;
+            if (youtubePlayerRef.current && typeof youtubePlayerRef.current.getCurrentTime === 'function') {
+                currentTime = youtubePlayerRef.current.getCurrentTime();
+            }
+            executeYoutubeCommand('seekTo', [currentTime + cmd.payload, true]);
           } catch (e) {
             console.error('Error seeking youtube:', e);
           }
         }
-        if (cmd.type === 'YOUTUBE_SPEED') sendYoutubeCommand('setPlaybackRate', [cmd.payload]);
+        if (cmd.type === 'YOUTUBE_SPEED') executeYoutubeCommand('setPlaybackRate', [cmd.payload]);
 
         if (cmd.type === 'SCOREBOARD_SET_NAMES') {
           setScoreboardConfig(prev => ({
@@ -388,8 +641,11 @@ export default function App() {
         if (cmd.type === 'SPONSORS_UPDATE') {
           setSponsorsConfig(cmd.payload);
         }
-      }
-    };
+      } 
+    } catch (err) {
+      console.error('Error handling remote command:', err);
+    }
+  };
 
     const channel = supabase
       .channel(`remote-control-${pairingCode}-${Math.random()}`)
@@ -400,60 +656,65 @@ export default function App() {
     const rtcChannel = supabase.channel(`webrtc-${pairingCode}`);
     
     rtcChannel.on('broadcast', { event: 'signal' }, async (payload) => {
-      const data = payload.payload;
-      
-      if (data.type === 'offer' && data.target === 'tv') {
-        setIsLiveBroadcasting(true);
-        setIsTimerActive(false);
-        setIsScoreboardActive(false);
-        setActiveMedia(null);
-        setActiveManualPlaylist(null);
+      try {
+        const data = payload.payload;
+        if (!data) return;
+        
+        if (data.type === 'offer' && data.target === 'tv') {
+          setIsLiveBroadcasting(true);
+          setIsTimerActive(false);
+          setIsScoreboardActive(false);
+          setActiveMedia(null);
+          setActiveManualPlaylist(null);
 
-        const pc = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        });
-        peerConnectionRef.current = pc;
+          const pc = new RTCPeerConnection({
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+          });
+          peerConnectionRef.current = pc;
 
-        pc.onicecandidate = (e) => {
-          if (e.candidate) {
-            rtcChannel.send({
-              type: 'broadcast',
-              event: 'signal',
-              payload: { type: 'candidate', candidate: e.candidate, target: 'remote' }
-            });
+          pc.onicecandidate = (e) => {
+            if (e.candidate) {
+              rtcChannel.send({
+                type: 'broadcast',
+                event: 'signal',
+                payload: { type: 'candidate', candidate: e.candidate, target: 'remote' }
+              });
+            }
+          };
+
+          pc.ontrack = (e) => {
+            if (liveStreamRef.current) {
+              liveStreamRef.current.srcObject = e.streams[0];
+            }
+          };
+
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+
+          rtcChannel.send({
+            type: 'broadcast',
+            event: 'signal',
+            payload: { type: 'answer', sdp: answer, target: 'remote' }
+          });
+
+        } else if (data.type === 'candidate' && data.target === 'tv') {
+          const pc = peerConnectionRef.current;
+          if (pc) {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
           }
-        };
-
-        pc.ontrack = (e) => {
-          if (liveStreamRef.current) {
-            liveStreamRef.current.srcObject = e.streams[0];
+        } else if (data.type === 'stop' && data.target === 'tv') {
+          setIsLiveBroadcasting(false);
+          if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+            peerConnectionRef.current = null;
           }
-        };
-
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        rtcChannel.send({
-          type: 'broadcast',
-          event: 'signal',
-          payload: { type: 'answer', sdp: answer, target: 'remote' }
-        });
-
-      } else if (data.type === 'candidate' && data.target === 'tv') {
-        const pc = peerConnectionRef.current;
-        if (pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
-      } else if (data.type === 'stop' && data.target === 'tv') {
-        setIsLiveBroadcasting(false);
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
-          peerConnectionRef.current = null;
-        }
+      } catch (err) {
+        console.error('WebRTC error in App:', err);
       }
     }).subscribe();
 
@@ -653,59 +914,71 @@ export default function App() {
   };
 
   const renderMedia = (media: MediaItem, isScheduled: boolean) => {
-    const shouldLoop = !isScheduled || activePlaylistMedia.length <= 1;
+    const isMasterClass = activeMasterClass && media.id === 'mc';
+    const shouldLoop = (!isScheduled || activePlaylistMedia.length <= 1) && !isMasterClass;
     const youtubeId = getYouTubeVideoId(media.url);
     
     if (youtubeId) {
-      return (
-        <YouTube
-          videoId={youtubeId}
-          className="w-full h-full"
-          iframeClassName="w-full h-full border-0"
-          opts={{
-            width: '100%',
-            height: '100%',
-            playerVars: {
-              autoplay: 1,
-              mute: isMuted ? 1 : 0,
-              loop: shouldLoop ? 1 : 0,
-              playlist: shouldLoop ? youtubeId : undefined,
-              controls: 0,
-              modestbranding: 1,
-              rel: 0,
-              enablejsapi: 1,
-              origin: window.location.origin
-            }
-          }}
-          onReady={(event) => {
-            try {
-              youtubePlayerRef.current = event.target;
-              if (isMuted) event.target.mute();
-              else event.target.unMute();
-              event.target.setVolume(volume);
-              
-              // Force play as soon as player is ready
-              setTimeout(() => {
-                try {
-                  if (youtubePlayerRef.current && typeof youtubePlayerRef.current.playVideo === 'function') {
-                    const iframe = youtubePlayerRef.current.getIframe();
-                    if (iframe) {
-                      youtubePlayerRef.current.playVideo();
-                    }
-                  }
-                } catch (e) {
-                  // Ignore error if player was unmounted before timeout
+      if (isMasterClass) {
+        return (
+          <YouTube
+            key={`mc-${youtubeId}`}
+            videoId={youtubeId}
+            className="w-full h-full pointer-events-none"
+            iframeClassName="w-full h-full border-0 pointer-events-none"
+            opts={youtubePlayerOpts}
+            onReady={(event) => {
+              try {
+                youtubePlayerRef.current = event.target;
+                // If it autoplays but we aren't started, pause it immediately. 
+                // Autoplay flag must be 1 so the iframe gets a true loaded state for APIs.
+                if (!isMasterClassStartedRef.current) {
+                    event.target.pauseVideo();
+                } else {
+                    event.target.playVideo();
                 }
-              }, 100);
-            } catch (e) {
-              console.error('Error in youtube onReady:', e);
-            }
-          }}
-          onError={(event) => {
-            console.error('YouTube Player Error:', event.data);
-          }}
-        />
-      );
+              } catch (e) {
+                console.error('Error in youtube onReady:', e);
+              }
+            }}
+            onPlay={(event) => {
+               if (!isMasterClassStartedRef.current) {
+                  event.target.pauseVideo();
+               }
+            }}
+            onStateChange={(event) => {
+              if (event.data === 0) {
+                setActiveMasterClass(null);
+                setIsMasterClassStarted(false);
+                setIsMasterClassWaitingRelease(false);
+              }
+            }}
+          />
+        );
+      } else {
+        const isMutedParam = isMuted ? 1 : 0;
+        // Note: We use raw iframe because react-youtube's synthetic wrappers and onReady 
+        // delays often fail Chromium's strict autoplay restrictions. A raw iframe with 
+        // autoplay=1&mute=1 works flawlessly on mount for regular media.
+        const src = `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}${shouldLoop ? `&loop=1&playlist=${youtubeId}` : ''}`;
+        
+        return (
+          <iframe
+            key={`${youtubeId}-${src}`}
+            src={src}
+            className="w-full h-full border-0 pointer-events-none"
+            allow="autoplay; encrypted-media"
+            title="YouTube Video"
+            ref={(el) => {
+              // We gently store the iframe so remote controls can still send postMessages to it
+              // if needed, without causing an initial crash loop.
+              if (el && !youtubePlayerRef.current) {
+                youtubePlayerRef.current = el; // Storing iframe directly
+              }
+            }}
+          />
+        );
+      }
     }
     if (media.type === 'video') {
       return (
@@ -713,6 +986,7 @@ export default function App() {
           key={media.url}
           src={media.url} 
           autoPlay 
+          playsInline
           loop={shouldLoop} 
           muted={isMuted} 
           ref={(el) => { if (el) el.volume = volume / 100; }}
@@ -757,6 +1031,10 @@ export default function App() {
       return <RemotePairing pairingCode={pairingCode} onPaired={(id) => setTeacherId(id)} session={session} />;
     }
     return <TVPairing onPaired={(id, code) => { setTeacherId(id); setPairingCode(code); }} />;
+  }
+
+  if (viewMode === 'REMOTE' && session && !dojoSettings.onboarding_completed && !isLoadingSettings) {
+    return <OnboardingModal teacherId={teacherId} onComplete={(settings) => setDojoSettings(prev => ({ ...prev, ...settings }))} />;
   }
 
   if (viewMode === 'REMOTE') {
@@ -861,6 +1139,138 @@ export default function App() {
                       <div className="absolute top-8 right-8 bg-red-600 text-white text-2xl font-black px-6 py-2 rounded-full animate-pulse flex items-center gap-3 shadow-2xl shadow-red-600/50">
                         <div className="w-4 h-4 bg-white rounded-full"></div> AO VIVO
                       </div>
+                    </div>
+                  ) : activeMasterClass ? (
+                    <div className="w-full h-full flex items-center justify-center relative">
+                      {/* Video Player - Always mounted to prevent restart on re-render */}
+                      <div className={`w-full h-full rounded-[3rem] overflow-hidden border border-zinc-800 shadow-2xl relative transition-all duration-500`}>
+                        {renderMedia({ id: 'mc', type: 'youtube', url: activeMasterClass.video_url, name: activeMasterClass.title }, false)}
+                        <div className="absolute top-8 left-8 flex items-center gap-4 bg-black/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
+                          <Crown className="text-blue-500" size={24} />
+                          <div>
+                              <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">MasterClass em andamento</p>
+                              <p className="text-lg font-black uppercase tracking-tight">{activeMasterClass.title}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Ready to Start Overlay (Capa) */}
+                      {!isMasterClassStarted && !isTimerActive && (
+                        <div className="absolute inset-0 z-50 bg-black rounded-[3rem] flex items-center justify-center overflow-hidden border border-zinc-800 shadow-2xl">
+                          <img 
+                            src={activeMasterClass.instructor_image_url || `https://picsum.photos/seed/${activeMasterClass.id}/1280/720`} 
+                            className="absolute inset-0 w-full h-full object-cover opacity-40 blur-xl scale-110"
+                            alt="Background"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="relative z-10 w-full max-w-6xl mx-auto px-12 flex flex-col md:flex-row items-center gap-12">
+                            <motion.div 
+                              initial={{ x: -50, opacity: 0 }}
+                              animate={{ x: 0, opacity: 1 }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                              className="relative"
+                            >
+                              <div className="absolute inset-0 bg-blue-600 rounded-[3rem] blur-3xl opacity-20 animate-pulse"></div>
+                              <img 
+                                src={activeMasterClass.instructor_image_url || `https://picsum.photos/seed/${activeMasterClass.id}/400/400`} 
+                                className="w-[40vmin] h-[40vmin] rounded-[3rem] object-cover border-8 border-zinc-900 shadow-2xl relative z-20"
+                                alt={activeMasterClass.instructor_name}
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute -bottom-6 -right-6 bg-blue-600 px-8 py-3 rounded-2xl text-[1.5vmin] font-black uppercase tracking-[0.3em] shadow-2xl z-30 border-4 border-black">
+                                Sensei Conectado
+                              </div>
+                            </motion.div>
+
+                            <motion.div 
+                              initial={{ x: 50, opacity: 0 }}
+                              animate={{ x: 0, opacity: 1 }}
+                              transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+                              className="flex-1 text-center md:text-left space-y-6"
+                            >
+                                <div className="flex items-center gap-3 justify-center md:justify-start">
+                                  <span className="bg-blue-600 text-[1.2vmin] font-black uppercase tracking-widest px-4 py-1 rounded-full">CONTEÚDO EXCLUSIVO</span>
+                                  <span className="text-zinc-500 font-bold uppercase tracking-widest text-[1.2vmin]">MasterClass</span>
+                                  {activeMasterClass.duration && (
+                                    <div className="flex items-center gap-2 text-zinc-400 font-bold tracking-widest text-[1.2vmin] ml-4 bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
+                                      <TimerIcon size={14} className="text-blue-500" />
+                                      <span>DURAÇÃO: {activeMasterClass.duration}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <h1 className="text-[8vmin] font-black tracking-tighter leading-none text-white drop-shadow-2xl">
+                                  {activeMasterClass.title}
+                                </h1>
+                                <p className="text-[3vmin] text-zinc-400 font-medium max-w-2xl leading-relaxed">
+                                  {activeMasterClass.description || `${activeMasterClass.instructor_name} ensina as técnicas mais refinadas do judô moderno neste treinamento exclusivo.`}
+                                </p>
+                                <div className="pt-8 flex flex-col gap-4">
+                                  <div className="flex items-center gap-4 text-zinc-500 justify-center md:justify-start">
+                                    <div className="w-12 h-1 bg-blue-600 rounded-full"></div>
+                                    <span className="uppercase text-[1.5vmin] font-black tracking-[0.2em]">Aguardando Início do Treinamento</span>
+                                  </div>
+                                </div>
+                            </motion.div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Timer Overlay */}
+                      {isTimerActive && (
+                        <div className="absolute inset-0 z-50 bg-black rounded-[3rem]">
+                          <TabataTimer 
+                            externalCommand={remoteCommand} 
+                            isMuted={isMuted} 
+                            volume={volume} 
+                            initialConfig={
+                              activeMasterClass && lastMarkerIndex >= 0 && activeMasterClass.markers?.[lastMarkerIndex]?.action === 'START_TIMER'
+                                ? { 
+                                    ...activeMasterClass.markers[lastMarkerIndex].timer_config, 
+                                    name: activeMasterClass.title,
+                                    workLabel: activeMasterClass.title
+                                  }
+                                : dojoSettings.timer_config
+                            }
+                            isFreePlan={!isStarter || sponsorsConfig.timer_active}
+                            globalSponsors={isStarter && sponsorsConfig.timer_active ? timerSponsors : (dojoSettings.timer_config?.free_sponsors || [])}
+                            globalSponsorInterval={isStarter && sponsorsConfig.timer_active ? sponsorsConfig.interval : (dojoSettings.timer_config?.free_sponsor_interval || 15)}
+                            onComplete={() => {
+                              setIsTimerActive(false);
+                              if (youtubePlayerRef.current) {
+                                youtubePlayerRef.current.playVideo();
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Release Waiting Overlay */}
+                      {isMasterClassWaitingRelease && !isTimerActive && (
+                        <div className="absolute inset-0 z-50 bg-zinc-950 rounded-[3rem] flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in zoom-in duration-500 overflow-hidden">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-blue-500 rounded-full blur-3xl opacity-20 animate-pulse"></div>
+                            <img 
+                              src={activeMasterClass.instructor_image_url} 
+                              className="w-[30vmin] h-[30vmin] rounded-full object-cover border-8 border-zinc-900 shadow-2xl relative z-10"
+                              alt={activeMasterClass.instructor_name}
+                            />
+                            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-blue-600 px-6 py-2 rounded-full text-[1.5vmin] font-black uppercase tracking-[0.3em] shadow-xl z-20">
+                              Mestre Online
+                            </div>
+                          </div>
+                          <div className="space-y-4 px-12">
+                            <h2 className="text-[5vmin] font-black tracking-tighter leading-tight max-w-4xl">
+                              {activeMasterClass.markers?.[lastMarkerIndex]?.message || `"${activeMasterClass.instructor_name.split(' ')[0]}, garanta que todos estão com o kumi kata realizado corretamente!"`}
+                            </h2>
+                            <p className="text-[2vmin] text-zinc-500 font-bold uppercase tracking-[0.5em]">
+                              Aguardando liberação do Sensei no celular...
+                            </p>
+                          </div>
+                          <div className="pt-8">
+                             <Loader2 className="w-[4vmin] h-[4vmin] text-blue-500 animate-spin opacity-50" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : isScoreboardActive ? (
                     <div className="w-full h-full flex items-center justify-center">

@@ -35,6 +35,7 @@ interface TabataTimerProps {
     type?: 'image' | 'video';
   }[];
   globalSponsorInterval?: number;
+  onComplete?: () => void;
 }
 
 const DEFAULT_CONFIG: TabataConfig = {
@@ -44,7 +45,16 @@ const DEFAULT_CONFIG: TabataConfig = {
   cycles: 8,
 };
 
-export default function TabataTimer({ externalCommand, isMuted = true, volume = 50, initialConfig, isFreePlan, globalSponsors = [], globalSponsorInterval = 15 }: TabataTimerProps) {
+export default function TabataTimer({ 
+  externalCommand, 
+  isMuted = true, 
+  volume = 50, 
+  initialConfig, 
+  isFreePlan, 
+  globalSponsors = [], 
+  globalSponsorInterval = 15,
+  onComplete
+}: TabataTimerProps) {
   const [config, setConfig] = useState<TabataConfig>(() => {
     const merged = { ...DEFAULT_CONFIG, ...(initialConfig || {}) };
     return {
@@ -70,30 +80,44 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   const [isActive, setIsActive] = useState(false);
   const [sponsorIndex, setSponsorIndex] = useState(0);
 
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastInitConfigRef = useRef<string | null>(null);
+  const lastCommandTimeRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (initialConfig) {
-      setConfig(prev => {
-        const merged = { ...DEFAULT_CONFIG, ...initialConfig };
-        return {
-          ...merged,
-          prepTime: Math.max(0, merged.prepTime),
-          workTime: Math.max(1, merged.workTime),
-          restTime: Math.max(1, merged.restTime),
-          cycles: Math.max(1, merged.cycles)
-        };
-      });
-      
-      if (!isActive) {
-        if (initialConfig.mode === 'PROGRESSIVE') {
-          setPhase('RUNNING');
-          setTimeLeft(0);
-        } else if (initialConfig.mode === 'REGRESSIVE') {
-          setPhase('RUNNING');
-          setTimeLeft(initialConfig.targetTime || 600);
-        } else if (phase === 'PREP' || phase === 'RUNNING') {
-          setPhase('PREP');
-          setTimeLeft(Math.max(0, initialConfig.prepTime ?? DEFAULT_CONFIG.prepTime));
+      try {
+        // Deep check to avoid unnecessary resets on re-renders from parent
+        const configStr = JSON.stringify(initialConfig);
+        if (configStr === lastInitConfigRef.current) return;
+        lastInitConfigRef.current = configStr;
+
+        setConfig(prev => {
+          const merged = { ...DEFAULT_CONFIG, ...initialConfig };
+          return {
+            ...merged,
+            prepTime: Math.max(0, merged.prepTime),
+            workTime: Math.max(1, merged.workTime),
+            restTime: Math.max(1, merged.restTime),
+            cycles: Math.max(1, merged.cycles)
+          };
+        });
+        
+        if (!isActive) {
+          if (initialConfig.mode === 'PROGRESSIVE') {
+            setPhase('RUNNING');
+            setTimeLeft(0);
+          } else if (initialConfig.mode === 'REGRESSIVE') {
+            setPhase('RUNNING');
+            setTimeLeft(initialConfig.targetTime || 600);
+          } else {
+            setPhase('PREP');
+            setTimeLeft(Math.max(0, initialConfig.prepTime ?? DEFAULT_CONFIG.prepTime));
+          }
         }
+      } catch (e) {
+        console.error('Error processing initialConfig:', e);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,11 +135,6 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
   }, [isFreePlan, globalSponsors.length, globalSponsorInterval]);
 
   const currentSponsor = globalSponsors.length > 0 ? globalSponsors[sponsorIndex % globalSponsors.length] : undefined;
-
-  // Removed redundant useEffect for initialConfig
-  
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Initialize Audio Context on first interaction to comply with browser policies
   useEffect(() => {
@@ -176,90 +195,6 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
     }
   }, [isMuted, volume]);
 
-  // Handle external commands from remote control
-  useEffect(() => {
-    if (!externalCommand) return;
-
-    switch (externalCommand.type) {
-      case 'START':
-        if (!isActive && phase === 'PREP' && timeLeft === config.prepTime && config.prepTime > 0) {
-          playPhaseAudio('PREP');
-        }
-        setIsActive(true);
-        break;
-      case 'PAUSE':
-        setIsActive(false);
-        break;
-      case 'RESET':
-        setIsActive(false);
-        setCurrentCycle(1);
-        if (config.mode === 'PROGRESSIVE') {
-          setPhase('RUNNING');
-          setTimeLeft(0);
-        } else if (config.mode === 'REGRESSIVE') {
-          setPhase('RUNNING');
-          setTimeLeft(config.targetTime || 600);
-        } else {
-          setPhase('PREP');
-          setTimeLeft(Math.max(0, config.prepTime));
-        }
-        break;
-      case 'CONFIG_UPDATE':
-        if (externalCommand.payload) {
-          const newConfig = externalCommand.payload as TabataConfig;
-          setConfig(newConfig);
-          if (!isActive) {
-            if (newConfig.mode === 'PROGRESSIVE') {
-              setPhase('RUNNING');
-              setTimeLeft(0);
-            } else if (newConfig.mode === 'REGRESSIVE') {
-              setPhase('RUNNING');
-              setTimeLeft(newConfig.targetTime || 600);
-            } else if (phase === 'PREP' || phase === 'RUNNING') {
-              setPhase('PREP');
-              setTimeLeft(Math.max(0, newConfig.prepTime));
-            }
-          }
-        }
-        break;
-    }
-  }, [externalCommand, config, isActive, phase]);
-
-  const nextPhase = useCallback(() => {
-    const mode = config.mode || 'HIT';
-    const hitCycles = config.hitCycles || [];
-    const useHitCycles = mode === 'HIT' && hitCycles.length > 0;
-    
-    if (mode === 'PROGRESSIVE' || mode === 'REGRESSIVE') {
-      if (phase === 'PREP') {
-        setPhase('RUNNING');
-        setTimeLeft(mode === 'PROGRESSIVE' ? 0 : (config.targetTime || 600));
-      } else if (phase === 'RUNNING') {
-        setPhase('FINISHED');
-        setIsActive(false);
-      }
-    } else {
-      if (phase === 'PREP') {
-        setPhase('WORK');
-        setTimeLeft(useHitCycles ? (hitCycles[0]?.workTime || config.workTime) : config.workTime);
-      } else if (phase === 'WORK') {
-        setPhase('REST');
-        setTimeLeft(useHitCycles ? (hitCycles[currentCycle - 1]?.restTime || config.restTime) : config.restTime);
-      } else if (phase === 'REST') {
-        const totalCycles = useHitCycles ? hitCycles.length : config.cycles;
-        if (currentCycle < totalCycles) {
-          const nextCycleIndex = currentCycle; // 0-indexed for array would be currentCycle
-          setCurrentCycle(prev => prev + 1);
-          setPhase('WORK');
-          setTimeLeft(useHitCycles ? (hitCycles[nextCycleIndex]?.workTime || config.workTime) : config.workTime);
-        } else {
-          setPhase('FINISHED');
-          setIsActive(false);
-        }
-      }
-    }
-  }, [phase, currentCycle, config]);
-
   const playPhaseAudio = useCallback((targetPhase: Phase) => {
     if (isMuted) return;
 
@@ -304,22 +239,150 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
     }
   }, [isMuted, volume, config, playSound, currentCycle, phase]);
 
+  const nextPhase = useCallback(() => {
+    const mode = config.mode || 'HIT';
+    const hitCycles = config.hitCycles || [];
+    const useHitCycles = mode === 'HIT' && hitCycles.length > 0;
+    
+    if (mode === 'PROGRESSIVE' || mode === 'REGRESSIVE') {
+      if (phase === 'PREP') {
+        setPhase('RUNNING');
+        setTimeLeft(mode === 'PROGRESSIVE' ? 0 : (config.targetTime || 600));
+      } else if (phase === 'RUNNING') {
+        setPhase('FINISHED');
+        setIsActive(false);
+        if (onComplete) onComplete();
+      }
+    } else {
+      if (phase === 'PREP') {
+        setPhase('WORK');
+        setTimeLeft(useHitCycles ? (hitCycles[0]?.workTime || config.workTime) : config.workTime);
+      } else if (phase === 'WORK') {
+        setPhase('REST');
+        setTimeLeft(useHitCycles ? (hitCycles[currentCycle - 1]?.restTime || config.restTime) : config.restTime);
+      } else if (phase === 'REST') {
+        const totalCycles = useHitCycles ? hitCycles.length : config.cycles;
+        if (currentCycle < totalCycles) {
+          const nextCycleIndex = currentCycle; // 0-indexed for array would be currentCycle
+          setCurrentCycle(prev => prev + 1);
+          setPhase('WORK');
+          setTimeLeft(useHitCycles ? (hitCycles[nextCycleIndex]?.workTime || config.workTime) : config.workTime);
+        } else {
+          setPhase('FINISHED');
+          setIsActive(false);
+          if (onComplete) onComplete();
+        }
+      }
+    }
+  }, [phase, currentCycle, config, onComplete]);
+
+  // Handle external commands from remote control
+  useEffect(() => {
+    if (!externalCommand) return;
+    
+    // Ensure we only process each unique command once
+    const cmdTime = (externalCommand as any).timestamp;
+    if (cmdTime && cmdTime === lastCommandTimeRef.current) return;
+    lastCommandTimeRef.current = cmdTime;
+
+    switch (externalCommand.type) {
+      case 'START':
+        setIsActive(true);
+        // Play audio only if we were at the very beginning
+        setPhase(currentPhase => {
+          if (currentPhase === 'PREP') {
+            setTimeLeft(currentT => {
+              if (currentT === config.prepTime && config.prepTime > 0) {
+                playPhaseAudio('PREP');
+              }
+              return currentT;
+            });
+          }
+          return currentPhase;
+        });
+        break;
+      case 'PAUSE':
+        setIsActive(false);
+        break;
+      case 'RESET':
+        setIsActive(false);
+        setCurrentCycle(1);
+        if (config.mode === 'PROGRESSIVE') {
+          setPhase('RUNNING');
+          setTimeLeft(0);
+        } else if (config.mode === 'REGRESSIVE') {
+          setPhase('RUNNING');
+          setTimeLeft(config.targetTime || 600);
+        } else {
+          setPhase('PREP');
+          setTimeLeft(Math.max(0, config.prepTime));
+        }
+        break;
+      case 'CONFIG_UPDATE':
+        if (externalCommand.payload) {
+          const newConfig = externalCommand.payload as TabataConfig;
+          setConfig(newConfig);
+          // Only reset if not running
+          setIsActive(active => {
+            if (!active) {
+              if (newConfig.mode === 'PROGRESSIVE') {
+                setPhase('RUNNING');
+                setTimeLeft(0);
+              } else if (newConfig.mode === 'REGRESSIVE') {
+                setPhase('RUNNING');
+                setTimeLeft(newConfig.targetTime || 600);
+              } else {
+                setPhase('PREP');
+                setTimeLeft(Math.max(0, newConfig.prepTime));
+              }
+            }
+            return active;
+          });
+        }
+        break;
+      case 'LOAD_PRESET':
+        if (externalCommand.payload) {
+          const newConfig = externalCommand.payload as TabataConfig;
+          setConfig(newConfig);
+          setIsActive(true);
+          setCurrentCycle(1);
+          if (newConfig.mode === 'PROGRESSIVE') {
+            setPhase('RUNNING');
+            setTimeLeft(0);
+          } else if (newConfig.mode === 'REGRESSIVE') {
+            setPhase('RUNNING');
+            setTimeLeft(newConfig.targetTime || 600);
+          } else {
+            setPhase('PREP');
+            const pTime = Math.max(0, newConfig.prepTime);
+            setTimeLeft(pTime);
+            if (pTime > 0) {
+              playPhaseAudio('PREP');
+            }
+          }
+        }
+        break;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalCommand]);
+
   useEffect(() => {
     const mode = config.mode || 'HIT';
     const hitCycles = config.hitCycles || [];
     const useHitCycles = mode === 'HIT' && hitCycles.length > 0;
-    const totalCycles = useHitCycles ? hitCycles.length : config.cycles;
+    const totalCycles = useHitCycles ? hitCycles.length : (config.cycles || 1);
 
     if (isActive) {
       if (phase === 'PREP' || mode === 'REGRESSIVE' || mode === 'HIT' || mode === 'ROUNDS') {
         if (timeLeft > 0) {
           if (timeLeft <= 3) {
-            playSound(440, 0.1);
+            try { playSound(440, 0.1); } catch (e) {}
           }
-          timerRef.current = setInterval(() => {
-            setTimeLeft(prev => prev - 1);
+          const timer = setTimeout(() => {
+            setTimeLeft(prev => Math.max(0, prev - 1));
           }, 1000);
-        } else if (timeLeft === 0) {
+          return () => clearTimeout(timer);
+        } else {
           let nextP: Phase = 'FINISHED';
           if (mode === 'PROGRESSIVE' || mode === 'REGRESSIVE') {
             if (phase === 'PREP') nextP = 'RUNNING';
@@ -332,25 +395,22 @@ export default function TabataTimer({ externalCommand, isMuted = true, volume = 
               else nextP = 'FINISHED';
             }
           }
-          playPhaseAudio(nextP);
+          try { playPhaseAudio(nextP); } catch (e) {}
           nextPhase();
         }
       } else if (mode === 'PROGRESSIVE' && phase === 'RUNNING') {
         const target = config.targetTime || 600;
         if (timeLeft < target) {
-          timerRef.current = setInterval(() => {
+          const timer = setTimeout(() => {
             setTimeLeft(prev => prev + 1);
           }, 1000);
-        } else if (timeLeft >= target) {
-          playPhaseAudio('FINISHED');
+          return () => clearTimeout(timer);
+        } else {
+          try { playPhaseAudio('FINISHED'); } catch (e) {}
           nextPhase();
         }
       }
     }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
   }, [isActive, timeLeft, nextPhase, phase, currentCycle, config, playPhaseAudio, playSound]);
 
   const toggleTimer = () => setIsActive(!isActive);

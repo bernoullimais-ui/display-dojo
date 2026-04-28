@@ -8,7 +8,7 @@ import Scoreboard from './Scoreboard';
 import DigitalClock from './DigitalClock';
 import AdminPanel from './AdminPanel';
 import SponsorReports from './SponsorReports';
-import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv, PlusCircle, QrCode } from 'lucide-react';
+import { LogOut, Smartphone as SmartphoneIcon, Monitor, Timer as TimerIcon, Zap, Coffee, RotateCcw, Image as ImageIcon, Video, Upload, Trash2, PlayCircle, Loader2, Calendar, Clock, Plus, Youtube, Volume2, VolumeX, Volume1, XCircle, Check, Maximize, Edit, Settings, Lock, Crown, Star, Tv, PlusCircle, QrCode, Play } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
@@ -69,8 +69,12 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
   } = useTVManager(teacherId, isBusiness);
 
     const handleCommand = (type: string, payload?: any) => {
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    } catch (e) {
+      // Ignore vibration errors
     }
     onSendCommand(activeTvId, type, payload);
   };
@@ -84,7 +88,8 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
 
   const [activeTab, setActiveTab] = useState<'TIMER' | 'SCOREBOARD' | 'MEDIA_HUB' | 'PLAN'>('TIMER');
   const [activeSubTab, setActiveSubTab] = useState<'LIBRARY' | 'SCHEDULE' | 'DOJO' | 'TICKER' | 'PLAYLISTS'>('LIBRARY');
-  const [planSubTab, setPlanSubTab] = useState<'INFO' | 'REPORTS'>('INFO');
+  const [planSubTab, setPlanSubTab] = useState<'INFO' | 'REPORTS' | 'SHOP'>('INFO');
+  const [forceShowPlanSelection, setForceShowPlanSelection] = useState(false);
   const [dojoForm, setDojoForm] = useState({ name: '', city: '', state: '' });
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showPresetManager, setShowPresetManager] = useState(false);
@@ -130,46 +135,61 @@ const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isScanning) {
-      const scanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        /* verbose= */ false
-      );
-
-      scanner.render(
-        (decodedText) => {
-          // The QR code contains the URL, e.g., https://app.com/?code=A1B2C3
-          try {
-            const url = new URL(decodedText);
-            const code = url.searchParams.get('code');
-            if (code) {
-              setNewTvCode(code);
-              setIsScanning(false);
-              scanner.clear();
-            } else {
-              // Maybe it's just the code itself
-              if (decodedText.length === 6) {
-                setNewTvCode(decodedText);
-                setIsScanning(false);
-                scanner.clear();
-              }
-            }
-          } catch (e) {
-            // Not a URL, maybe just the code
-            if (decodedText.length === 6) {
-              setNewTvCode(decodedText);
-              setIsScanning(false);
-              scanner.clear();
-            }
+      let scanner: Html5QrcodeScanner | null = null;
+      
+      const timer = setTimeout(() => {
+        try {
+          const element = document.getElementById("reader");
+          if (!element) {
+            console.warn('QR Scanner: "reader" element not found in DOM yet.');
+            return;
           }
-        },
-        (error) => {
-          // Ignore scan errors (happens when no QR code is in frame)
+          
+          scanner = new Html5QrcodeScanner(
+            "reader",
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            /* verbose= */ false
+          );
+
+          scanner.render(
+            (decodedText) => {
+              try {
+                if (decodedText.startsWith('http')) {
+                  const url = new URL(decodedText);
+                  const code = url.searchParams.get('code');
+                  if (code) {
+                    setNewTvCode(code);
+                    setIsScanning(false);
+                    scanner?.clear().catch(() => {});
+                  }
+                } else if (decodedText.length === 6) {
+                  setNewTvCode(decodedText);
+                  setIsScanning(false);
+                  scanner?.clear().catch(() => {});
+                }
+              } catch (e) {
+                if (decodedText.length === 6) {
+                  setNewTvCode(decodedText);
+                  setIsScanning(false);
+                  scanner?.clear().catch(() => {});
+                }
+              }
+            },
+            (error) => {
+              // Ignore scan errors
+            }
+          );
+        } catch (err) {
+          console.error('Failed to initialize QR scanner:', err);
+          setIsScanning(false);
         }
-      );
+      }, 100);
 
       return () => {
-        scanner.clear().catch(console.error);
+        clearTimeout(timer);
+        if (scanner) {
+          scanner.clear().catch(() => {});
+        }
       };
     }
   }, [isScanning]);
@@ -680,7 +700,7 @@ const fileInputRef = useRef<HTMLInputElement>(null);
           >
             Todas as TVs (Broadcast)
           </button>
-          {tvSessions.map(session => (
+          {Array.from(new Map(tvSessions.map(s => [s.id, s])).values()).map((session: any) => (
             <button
               key={session.id}
               onClick={() => setActiveTvId(session.id)}
@@ -757,6 +777,11 @@ const fileInputRef = useRef<HTMLInputElement>(null);
             updateSponsorsConfig={updateSponsorsConfig}
             updatePlaylists={updatePlaylists}
             handleConfigChange={handleConfigChange}
+            onUpgradeClick={() => {
+              setActiveTab('PLAN');
+              setPlanSubTab('INFO');
+              setForceShowPlanSelection(true);
+            }}
           />
         )}
 
@@ -776,6 +801,9 @@ const fileInputRef = useRef<HTMLInputElement>(null);
             addTvError={addTvError}
             
             teacherId={teacherId}
+            handleCommand={handleCommand}
+            forceShowSelection={forceShowPlanSelection}
+            onModalClose={() => setForceShowPlanSelection(false)}
           />
         )}
       </div>
