@@ -19,6 +19,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`Current directory: ${process.cwd()}`);
+
   app.use(express.json());
 
   // --- PAGAR.ME API ROUTES ---
@@ -266,27 +269,9 @@ async function startServer() {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+      root: process.cwd(),
     });
     app.use(vite.middlewares);
-    
-    // Explicitly handle index.html for the root and any other non-API routes
-    app.get("*", async (req, res, next) => {
-      const url = req.originalUrl;
-      // Skip API routes
-      if (url.startsWith('/api')) {
-        return next();
-      }
-      
-      try {
-        const fs = await import("fs");
-        let template = fs.readFileSync(path.resolve(__dirname, "index.html"), "utf-8");
-        template = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ "Content-Type": "text/html" }).end(template);
-      } catch (e) {
-        vite.ssrFixStacktrace(e as Error);
-        next(e);
-      }
-    });
   } else {
     console.log("Starting in PRODUCTION mode");
     const distPath = path.join(process.cwd(), "dist");
