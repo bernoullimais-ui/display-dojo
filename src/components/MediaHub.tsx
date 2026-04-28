@@ -107,16 +107,17 @@ export default function MediaHub({
     : [];
 
   const currentFolderMedia = mediaList.filter(m => {
-    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/') && !m.name.startsWith('Áudios/')) {
+    const mName = m.name || '';
+    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && mName.includes('/') && !mName.startsWith('Áudios/')) {
       return false;
     }
-    if (!currentFolder) return !m.name.includes('/');
-    if (!m.name.startsWith(currentFolder + '/')) return false;
-    const rest = m.name.substring(currentFolder.length + 1);
+    if (!currentFolder) return !mName.includes('/');
+    if (!mName.startsWith(currentFolder + '/')) return false;
+    const rest = mName.substring(currentFolder.length + 1);
     return !rest.includes('/');
   }).sort((a, b) => {
-    const nameA = (a.name.includes('/') ? a.name.split('/').pop() : a.name) || '';
-    const nameB = (b.name.includes('/') ? b.name.split('/').pop() : b.name) || '';
+    const nameA = ((a.name || '').includes('/') ? (a.name || '').split('/').pop() : (a.name || '')) || '';
+    const nameB = ((b.name || '').includes('/') ? (b.name || '').split('/').pop() : (b.name || '')) || '';
     return nameA.localeCompare(nameB);
   });
 
@@ -131,16 +132,17 @@ export default function MediaHub({
     : [];
 
   const playlistFolderMedia = mediaList.filter(m => {
-    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && m.name.includes('/')) {
+    const mName = m.name || '';
+    if (!isPro && m.teacher_id === '00000000-0000-0000-0000-000000000000' && mName.includes('/')) {
       return false;
     }
-    if (!playlistFolder) return !m.name.includes('/');
-    if (!m.name.startsWith(playlistFolder + '/')) return false;
-    const rest = m.name.substring(playlistFolder.length + 1);
+    if (!playlistFolder) return !mName.includes('/');
+    if (!mName.startsWith(playlistFolder + '/')) return false;
+    const rest = mName.substring(playlistFolder.length + 1);
     return !rest.includes('/');
   }).sort((a, b) => {
-    const nameA = (a.name.includes('/') ? a.name.split('/').pop() : a.name) || '';
-    const nameB = (b.name.includes('/') ? b.name.split('/').pop() : b.name) || '';
+    const nameA = ((a.name || '').includes('/') ? (a.name || '').split('/').pop() : (a.name || '')) || '';
+    const nameB = ((b.name || '').includes('/') ? (b.name || '').split('/').pop() : (b.name || '')) || '';
     return nameA.localeCompare(nameB);
   });
 

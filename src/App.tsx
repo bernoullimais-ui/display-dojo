@@ -361,13 +361,15 @@ export default function App() {
         const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
         if (mediaData) {
           const mappedMedia = mediaData.map(m => {
+            const url = m.url || '';
+            const name = m.name || '';
             if (m.type === 'video' && (
-              m.url.toLowerCase().includes('.mp3') || 
-              m.url.toLowerCase().includes('.wav') || 
-              m.url.toLowerCase().includes('.m4a') ||
-              m.name.toLowerCase().endsWith('.mp3') ||
-              m.name.toLowerCase().endsWith('.wav') ||
-              m.name.toLowerCase().endsWith('.m4a')
+              url.toLowerCase().includes('.mp3') || 
+              url.toLowerCase().includes('.wav') || 
+              url.toLowerCase().includes('.m4a') ||
+              name.toLowerCase().endsWith('.mp3') ||
+              name.toLowerCase().endsWith('.wav') ||
+              name.toLowerCase().endsWith('.m4a')
             )) {
               return { ...m, type: 'audio' as const };
             }
@@ -402,13 +404,15 @@ export default function App() {
         const { data: mediaData } = await supabase.from('media').select('*').in('teacher_id', [teacherId, '00000000-0000-0000-0000-000000000000']);
         if (mediaData) {
           const mappedMedia = mediaData.map(m => {
+            const url = m.url || '';
+            const name = m.name || '';
             if (m.type === 'video' && (
-              m.url.toLowerCase().includes('.mp3') || 
-              m.url.toLowerCase().includes('.wav') || 
-              m.url.toLowerCase().includes('.m4a') ||
-              m.name.toLowerCase().endsWith('.mp3') ||
-              m.name.toLowerCase().endsWith('.wav') ||
-              m.name.toLowerCase().endsWith('.m4a')
+              url.toLowerCase().includes('.mp3') || 
+              url.toLowerCase().includes('.wav') || 
+              url.toLowerCase().includes('.m4a') ||
+              name.toLowerCase().endsWith('.mp3') ||
+              name.toLowerCase().endsWith('.wav') ||
+              name.toLowerCase().endsWith('.m4a')
             )) {
               return { ...m, type: 'audio' as const };
             }
@@ -908,6 +912,7 @@ export default function App() {
   }, [currentScheduledMedia, activePlaylistMedia.length, dojoSettings.timer_config?.imageDuration]);
 
   const getYouTubeVideoId = (url: string) => {
+    if (!url) return null;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
