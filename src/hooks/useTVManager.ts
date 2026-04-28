@@ -127,6 +127,11 @@ export function useTVManager(teacherId: string, isBusiness: boolean) {
     await supabase.from('sessions').update({ active_playlist_id: playlistId || null }).eq('id', sessionId);
   };
 
+  const handleRenameTv = async (sessionId: string, newName: string) => {
+    if (!supabase || !newName.trim()) return;
+    await supabase.from('sessions').update({ tv_name: newName.trim() }).eq('id', sessionId);
+  };
+
   return {
     tvSessions,
     setTvSessions,
@@ -148,6 +153,7 @@ export function useTVManager(teacherId: string, isBusiness: boolean) {
     setDisconnectedId,
     handleAddTv,
     handleDisconnectTv,
-    handleUpdateTvPlaylist
+    handleUpdateTvPlaylist,
+    handleRenameTv
   };
 }

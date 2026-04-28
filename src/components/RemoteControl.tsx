@@ -65,8 +65,11 @@ export default function RemoteControl({ initialPairingCode, teacherId, onSendCom
     addTvError, isAddingTv,
     isScanning, setIsScanning,
     disconnectingId, setDisconnectingId, disconnectedId, setDisconnectedId,
-    handleAddTv, handleDisconnectTv, handleUpdateTvPlaylist
+    handleAddTv, handleDisconnectTv, handleUpdateTvPlaylist, handleRenameTv
   } = useTVManager(teacherId, isBusiness);
+
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [tempTvName, setTempTvName] = useState('');
 
     const handleCommand = (type: string, payload?: any) => {
     try {
@@ -555,8 +558,54 @@ const fileInputRef = useRef<HTMLInputElement>(null);
                     className="flex flex-col gap-3 bg-black p-4 rounded-2xl border border-zinc-800"
                   >
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
+                      <div className="flex-1">
+                        {renamingId === session.id ? (
+                          <div className="flex items-center gap-2 pr-4">
+                            <input
+                              type="text"
+                              value={tempTvName}
+                              onChange={(e) => setTempTvName(e.target.value)}
+                              className="bg-zinc-800 border-blue-500 border rounded px-2 py-1 text-sm w-full outline-none"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleRenameTv(session.id, tempTvName);
+                                  setRenamingId(null);
+                                } else if (e.key === 'Escape') {
+                                  setRenamingId(null);
+                                }
+                              }}
+                            />
+                            <button 
+                              onClick={() => {
+                                handleRenameTv(session.id, tempTvName);
+                                setRenamingId(null);
+                              }}
+                              className="text-green-500 hover:text-green-400"
+                            >
+                              <Check size={16} />
+                            </button>
+                            <button 
+                              onClick={() => setRenamingId(null)}
+                              className="text-red-500 hover:text-red-400"
+                            >
+                              <XCircle size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 group">
+                            <p className="font-bold text-white">{session.tv_name || 'TV Principal'}</p>
+                            <button 
+                              onClick={() => {
+                                setRenamingId(session.id);
+                                setTempTvName(session.tv_name || 'TV Principal');
+                              }}
+                              className="text-zinc-500 hover:text-blue-500 transition-colors"
+                            >
+                              <Edit size={14} />
+                            </button>
+                          </div>
+                        )}
                         <p className="text-xs text-zinc-500 font-mono">Código: {session.id}</p>
                       </div>
                       <button 
